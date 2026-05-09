@@ -1,4 +1,4 @@
-import { BROWSER_HEADERS, isImage, extractAllImagesFromHtml } from './_shared.js'
+import { BROWSER_HEADERS, httpErrorMessage, isImage, extractAllImagesFromHtml } from './_shared.js'
 
 export default async function handler(req, res) {
   const { url } = req.query
@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     const headers = { ...BROWSER_HEADERS, Referer: referer, Accept: 'text/html,application/xhtml+xml,image/*,*/*;q=0.8' }
     const response = await fetch(url, { headers, redirect: 'follow' })
 
-    if (!response.ok) return res.status(response.status).json({ error: `HTTP ${response.status}` })
+    if (!response.ok) return res.status(response.status).json({ error: httpErrorMessage(response.status) })
 
     const contentType = response.headers.get('content-type') || ''
 

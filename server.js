@@ -28,6 +28,24 @@ const MIN_QUALITY_DIM = 600 // skip thumbnails smaller than this in any dimensio
 const BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Cache-Control': 'no-cache',
+  'Pragma': 'no-cache',
+  'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"Windows"',
+}
+
+// User-friendly messages for common HTTP error codes
+function httpErrorMessage(status) {
+  return {
+    401: 'Login required — this page is not publicly accessible.',
+    403: 'Access blocked — this website prevents direct downloading. Try opening the URL in your browser.',
+    404: 'Not found — the image or page doesn\'t exist at this URL.',
+    429: 'Too many requests — wait a moment, then try again.',
+    500: 'Server error — the website had an internal error.',
+    503: 'Service unavailable — the website may be down or overloaded.',
+  }[status] || `HTTP ${status} error.`
 }
 
 const THUMB_UPGRADE_RULES = [
@@ -214,7 +232,7 @@ async function fetchImageFromUrl(targetUrl) {
   const headers = { ...BROWSER_HEADERS, Referer: referer, Accept: 'text/html,application/xhtml+xml,image/*,*/*;q=0.8' }
 
   const response = await fetch(targetUrl, { headers, redirect: 'follow' })
-  if (!response.ok) return { ok: false, status: response.status }
+  if (!response.ok) return { ok: false, status: response.status, message: httpErrorMessage(response.status) }
 
   const contentType = response.headers.get('content-type') || ''
 
@@ -294,7 +312,7 @@ app.get('/api/scan', async (req, res) => {
     const headers = { ...BROWSER_HEADERS, Referer: referer, Accept: 'text/html,application/xhtml+xml,image/*,*/*;q=0.8' }
     const response = await fetch(url, { headers, redirect: 'follow' })
 
-    if (!response.ok) return res.status(response.status).json({ error: `HTTP ${response.status}` })
+    if (!response.ok) return res.status(response.status).json({ error: httpErrorMessage(response.status) })
 
     const contentType = response.headers.get('content-type') || ''
 

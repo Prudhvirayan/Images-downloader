@@ -657,6 +657,17 @@ export default function App() {
                     className="flex-1 px-3.5 py-2.5 text-sm bg-transparent outline-none min-w-0 disabled:opacity-50"
                     style={{ color: 'var(--text-1)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '13px' }}
                   />
+                  {template && !isBusy && phase !== 'scanning' && (
+                    <button
+                      onClick={() => onInput('')}
+                      title="Clear URL"
+                      className="flex items-center justify-center w-8 flex-shrink-0 transition-colors"
+                      style={{ color: 'var(--text-3)' }}
+                      onMouseEnter={e => e.currentTarget.style.color = 'var(--text-1)'}
+                      onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
+                      <Ic.Close cls="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <UrlActionBtn
                     template={template}
                     onPaste={onPaste}
