@@ -21,6 +21,10 @@ const JUNK_URL_RE = /favicon|sprite|1x1|tracking|placeholder|blank|spacer|separa
 // Checked against just the filename (last path segment)
 const JUNK_FILENAME_RE = /logo|favicon|icon|sprite|banner|avatar|thumb-placeholder/i
 
+// Detects WordPress/CDN thumbnail dimension suffixes: image-800x600.jpg, image_300x200.png
+const WP_DIM_RE = /[-_](\d{2,4})[x×](\d{2,4})(?:-\w+)?\.(jpe?g|png|webp|gif)(\?.*)?$/i
+const MIN_QUALITY_DIM = 600 // skip thumbnails smaller than this in any dimension
+
 const BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   'Accept-Language': 'en-US,en;q=0.9',
@@ -124,6 +128,11 @@ function extractImageFromHtml(html, pageUrl) {
   return candidates[0].url
 }
 
+// Strip WordPress/CDN size suffix to get the base image identity for deduplication
+function getBaseUrl(url) {
+  return url.replace(WP_DIM_RE, '.$3')
+}
+
 // Extract ALL candidate images from a page (used by /api/scan)
 function extractAllImagesFromHtml(html, pageUrl) {
   const $ = cheerioLoad(html)
@@ -134,14 +143,25 @@ function extractAllImagesFromHtml(html, pageUrl) {
     const url = resolveUrl(raw, pageUrl)
     if (!url || seen.has(url)) return
     if (JUNK_URL_RE.test(url)) return
-    // Check filename separately — catches "ragalaharilogo.png", "site-logo.png", etc.
     const filename = url.split('/').pop().split('?')[0]
     if (JUNK_FILENAME_RE.test(filename)) return
-    // Skip images with explicit tiny dimensions
-    if ((w > 0 && w < 80) || (h > 0 && h < 80)) return
+
+    // Skip images with explicit tiny HTML dimensions
+    if ((w > 0 && w < 200) || (h > 0 && h < 200)) return
+
+    // Detect embedded dimension suffix (e.g. -300x200.jpg) and skip low-res thumbnails
+    const dimMatch = WP_DIM_RE.exec(url)
+    if (dimMatch) {
+      const dw = parseInt(dimMatch[1], 10)
+      const dh = parseInt(dimMatch[2], 10)
+      if (Math.max(dw, dh) < MIN_QUALITY_DIM) return // thumbnail — skip
+    }
+
     seen.add(url)
     const area = w * h
-    images.push({ url, score: scoreUrl(url) + (area > 0 ? Math.log(area + 1) : 0) })
+    // Images with detected large dimensions or no suffix (original) score higher
+    const dimBonus = dimMatch ? Math.log(Math.max(parseInt(dimMatch[1]), parseInt(dimMatch[2])) + 1) : 12
+    images.push({ url, score: scoreUrl(url) + dimBonus + (area > 0 ? Math.log(area + 1) : 0) })
   }
 
   $('img, source').each((_, el) => {
@@ -149,13 +169,11 @@ function extractAllImagesFromHtml(html, pageUrl) {
     const w = parseInt($el.attr('width') || '0', 10)
     const h = parseInt($el.attr('height') || '0', 10)
 
-    // Try various lazy-load attributes
     for (const attr of ['src', 'data-src', 'data-lazy', 'data-original', 'data-full', 'data-image']) {
       const raw = $el.attr(attr)
       if (raw && IMAGE_EXT_RE.test(raw)) { addCandidate(raw, w, h); break }
     }
 
-    // Pick largest from srcset
     const srcset = $el.attr('srcset') || $el.attr('data-srcset') || ''
     if (srcset) {
       let bestW = 0, bestSrc = null
@@ -168,7 +186,6 @@ function extractAllImagesFromHtml(html, pageUrl) {
     }
   })
 
-  // Also grab <a href="...jpg"> direct image links — common in gallery pages
   $('a[href]').each((_, el) => {
     const href = $(el).attr('href')
     if (href && IMAGE_EXT_RE.test(href) && !JUNK_URL_RE.test(href)) {
@@ -176,8 +193,19 @@ function extractAllImagesFromHtml(html, pageUrl) {
     }
   })
 
-  images.sort((a, b) => b.score - a.score)
-  return images.map((i) => i.url)
+  // Deduplicate by base URL — collapses WordPress multi-size variants into one
+  // e.g. photo-300x200.jpg, photo-1080x720.jpg, photo.jpg → keeps best-scored one
+  const byBase = new Map()
+  for (const img of images) {
+    const base = getBaseUrl(img.url)
+    if (!byBase.has(base) || img.score > byBase.get(base).score) {
+      byBase.set(base, img)
+    }
+  }
+
+  const deduped = Array.from(byBase.values())
+  deduped.sort((a, b) => b.score - a.score)
+  return deduped.map((i) => i.url)
 }
 
 async function fetchImageFromUrl(targetUrl) {

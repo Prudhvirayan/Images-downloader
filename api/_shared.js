@@ -7,6 +7,8 @@ const THUMB_RE   = /thumb(nail)?|[\-_]sm[\-_]|[\-_]xs[\-_]|[\-_]icon|preview[\-_
 const FULLSIZE_RE = /full(size|res)?|[\-_]large|[\-_]orig(inal)?|[\-_]hq|[\-_]hires|[\-_]big|photo(?!s)/i
 const JUNK_URL_RE      = /favicon|sprite|1x1|tracking|placeholder|blank|spacer|separator/i
 const JUNK_FILENAME_RE = /logo|favicon|icon|sprite|banner|avatar|thumb-placeholder/i
+const WP_DIM_RE        = /[-_](\d{2,4})[x×](\d{2,4})(?:-\w+)?\.(jpe?g|png|webp|gif)(\?.*)?$/i
+const MIN_QUALITY_DIM  = 600
 
 export const BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -94,6 +96,10 @@ function extractImageFromHtml(html, pageUrl) {
   return candidates[0].url
 }
 
+function getBaseUrl(url) {
+  return url.replace(WP_DIM_RE, '.$3')
+}
+
 export function extractAllImagesFromHtml(html, pageUrl) {
   const $ = cheerioLoad(html)
   const seen = new Set()
@@ -105,9 +111,19 @@ export function extractAllImagesFromHtml(html, pageUrl) {
     if (JUNK_URL_RE.test(url)) return
     const filename = url.split('/').pop().split('?')[0]
     if (JUNK_FILENAME_RE.test(filename)) return
-    if ((w > 0 && w < 80) || (h > 0 && h < 80)) return
+    if ((w > 0 && w < 200) || (h > 0 && h < 200)) return
+
+    const dimMatch = WP_DIM_RE.exec(url)
+    if (dimMatch) {
+      const dw = parseInt(dimMatch[1], 10)
+      const dh = parseInt(dimMatch[2], 10)
+      if (Math.max(dw, dh) < MIN_QUALITY_DIM) return
+    }
+
     seen.add(url)
-    images.push({ url, score: scoreUrl(url) + (w * h > 0 ? Math.log(w * h + 1) : 0) })
+    const area = w * h
+    const dimBonus = dimMatch ? Math.log(Math.max(parseInt(dimMatch[1]), parseInt(dimMatch[2])) + 1) : 12
+    images.push({ url, score: scoreUrl(url) + dimBonus + (area > 0 ? Math.log(area + 1) : 0) })
   }
 
   $('img, source').each((_, el) => {
@@ -135,8 +151,17 @@ export function extractAllImagesFromHtml(html, pageUrl) {
     if (href && IMAGE_EXT_RE.test(href) && !JUNK_URL_RE.test(href)) addCandidate(href)
   })
 
-  images.sort((a, b) => b.score - a.score)
-  return images.map(i => i.url)
+  const byBase = new Map()
+  for (const img of images) {
+    const base = getBaseUrl(img.url)
+    if (!byBase.has(base) || img.score > byBase.get(base).score) {
+      byBase.set(base, img)
+    }
+  }
+
+  const deduped = Array.from(byBase.values())
+  deduped.sort((a, b) => b.score - a.score)
+  return deduped.map(i => i.url)
 }
 
 export async function fetchImageFromUrl(targetUrl) {

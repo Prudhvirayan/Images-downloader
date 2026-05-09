@@ -243,21 +243,26 @@ function Lightbox({ images, startIndex, onClose }) {
     <div ref={lbRef} className="fixed inset-0 z-50 flex flex-col bg-black select-none">
       {/* Toolbar — hidden in fullscreen */}
       {!isFS && (
-        <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-white/8 flex-shrink-0" style={{ background: 'rgba(10,10,12,0.85)', backdropFilter: 'blur(12px)' }}>
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-white/8 flex-shrink-0" style={{ background: 'rgba(10,10,12,0.85)', backdropFilter: 'blur(12px)' }}>
           <span className="text-white/40 text-xs tabular-nums font-mono flex-shrink-0">{index + 1} / {total}</span>
           <p className="text-white/20 text-[11px] font-mono truncate hidden lg:block min-w-0 flex-1">{current.imageUrl || current.url}</p>
-          <div className="flex items-center gap-0.5 flex-shrink-0">
-            <TbBtn onClick={() => zoomAt(0,0,0.75)} title="Zoom out"><Ic.ZoomOut /></TbBtn>
+
+          {/* Desktop-only controls — hidden on small screens to prevent overflow */}
+          <div className="hidden sm:flex items-center gap-0.5 flex-shrink-0">
+            <TbBtn onClick={() => zoomAt(0,0,0.75)} title="Zoom out (-)"><Ic.ZoomOut /></TbBtn>
             <span className="text-white/30 text-xs w-10 text-center tabular-nums">{Math.round(vt.scale * 100)}%</span>
-            <TbBtn onClick={() => zoomAt(0,0,1.33)} title="Zoom in"><Ic.ZoomIn /></TbBtn>
-            <div className="w-px h-4 bg-white/10 mx-1.5" />
+            <TbBtn onClick={() => zoomAt(0,0,1.33)} title="Zoom in (+)"><Ic.ZoomIn /></TbBtn>
+            <div className="w-px h-4 bg-white/10 mx-1" />
             <TbBtn onClick={() => { resetView(); setRotation(r => (r-90+360)%360) }} title="Rotate left"><Ic.RotateCCW /></TbBtn>
             <TbBtn onClick={() => { resetView(); setRotation(r => (r+90)%360) }} title="Rotate right (R)"><Ic.RotateCW /></TbBtn>
-            <div className="w-px h-4 bg-white/10 mx-1.5" />
+            <div className="w-px h-4 bg-white/10 mx-1" />
             <TbBtn onClick={() => { resetView(); setRotation(0) }} title="Reset (0)" wide>Reset</TbBtn>
-            <div className="w-px h-4 bg-white/10 mx-1.5" />
+            <div className="w-px h-4 bg-white/10 mx-1" />
+          </div>
+
+          {/* Always visible — fullscreen + close must never be pushed off screen */}
+          <div className="flex items-center gap-0.5 flex-shrink-0 ml-auto">
             <TbBtn onClick={toggleFS} title="Fullscreen (F)" active={isFS}><Ic.Fullscreen /></TbBtn>
-            <div className="w-px h-4 bg-white/10 mx-1.5" />
             <TbBtn onClick={onClose} title="Close (Esc)"><Ic.Close /></TbBtn>
           </div>
         </div>
@@ -431,6 +436,49 @@ function ResultItem({ status, onPreview }) {
   )
 }
 
+// ─── URL action button (Paste when empty, Copy when has content) ──────────────
+function UrlActionBtn({ template, onPaste, disabled }) {
+  const [copied, setCopied] = useState(false)
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(template)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1400)
+    } catch {}
+  }
+
+  const btnStyle = {
+    borderColor: 'var(--border)',
+    color: copied ? '#10b981' : 'var(--text-2)',
+    background: 'var(--surface)',
+  }
+
+  if (template) {
+    return (
+      <button onClick={handleCopy} disabled={disabled}
+        className="flex items-center gap-1.5 px-3 border-l text-xs font-medium flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        style={btnStyle}
+        onMouseEnter={e => { if (!copied) e.currentTarget.style.color = 'var(--violet)' }}
+        onMouseLeave={e => { if (!copied) e.currentTarget.style.color = 'var(--text-2)' }}>
+        {copied ? <Ic.Check /> : <Ic.Copy />}
+        <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy'}</span>
+      </button>
+    )
+  }
+
+  return (
+    <button onClick={onPaste} disabled={disabled}
+      className="flex items-center gap-1.5 px-3 border-l text-xs font-medium flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      style={btnStyle}
+      onMouseEnter={e => e.currentTarget.style.color = 'var(--violet)'}
+      onMouseLeave={e => e.currentTarget.style.color = 'var(--text-2)'}>
+      <Ic.Clipboard />
+      <span className="hidden sm:inline">Paste</span>
+    </button>
+  )
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 const MAX_PREV = 3
 
@@ -511,6 +559,33 @@ export default function App() {
     setPhase('done')
   }, [urls, phase])
 
+  const onRetryFailed = useCallback(async () => {
+    const failedIndices = statuses.map((s, i) => (s && !s.ok) ? i : -1).filter(i => i >= 0)
+    if (!failedIndices.length || phase === 'fetching' || phase === 'zipping') return
+    const failedUrls = failedIndices.map(i => statuses[i].url)
+    const ctrl = new AbortController(); abortRef.current = ctrl
+    setPhase('fetching'); setDone(0); setZipPct(null)
+
+    const results = await fetchWithPool(failedUrls, {
+      signal: ctrl.signal,
+      onProgress: d => setDone(d),
+      onResult: (relIdx, result) => {
+        const origIdx = failedIndices[relIdx]
+        let r = result
+        if (result.ok) {
+          const pu = URL.createObjectURL(result.blob)
+          objUrlsRef.current.push(pu)
+          r = { ...result, previewUrl: pu }
+        }
+        setStatuses(prev => { const n = [...prev]; n[origIdx] = r; return n })
+      },
+    })
+    if (ctrl.signal.aborted) { setPhase('idle'); return }
+    setPhase('zipping')
+    await buildAndDownloadZip(results.filter(Boolean), 'images-retry.zip', setZipPct)
+    setPhase('done')
+  }, [statuses, phase])
+
   const onCancel = useCallback(() => { abortRef.current?.abort(); setPhase('idle') }, [])
   const onClear  = useCallback(() => {
     abortRef.current?.abort()
@@ -582,14 +657,11 @@ export default function App() {
                     className="flex-1 px-3.5 py-2.5 text-sm bg-transparent outline-none min-w-0 disabled:opacity-50"
                     style={{ color: 'var(--text-1)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '13px' }}
                   />
-                  <button onClick={onPaste} disabled={isBusy || phase === 'scanning'}
-                    className="flex items-center gap-1.5 px-3 border-l text-xs font-medium flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ borderColor: 'var(--border)', color: 'var(--text-2)', background: 'var(--surface)' }}
-                    onMouseEnter={e => e.currentTarget.style.color='var(--violet)'}
-                    onMouseLeave={e => e.currentTarget.style.color='var(--text-2)'}>
-                    <Ic.Clipboard />
-                    <span className="hidden sm:inline">Paste</span>
-                  </button>
+                  <UrlActionBtn
+                    template={template}
+                    onPaste={onPaste}
+                    disabled={isBusy || phase === 'scanning'}
+                  />
                 </div>
 
                 {/* Mode chip */}
@@ -604,7 +676,9 @@ export default function App() {
                   {previewList.map((u, i) =>
                     u === null
                       ? <div key="el" style={{ color: 'var(--text-3)' }}>… {(urls.length - MAX_PREV - 1).toLocaleString()} more</div>
-                      : <div key={i} className="truncate" style={{ color: 'var(--text-2)' }} title={u}>{u}</div>
+                      : <a key={i} href={u} target="_blank" rel="noopener noreferrer"
+                          className="truncate block hover:underline"
+                          style={{ color: 'var(--text-2)' }} title={u}>{u}</a>
                   )}
                 </div>
               )}
@@ -658,13 +732,22 @@ export default function App() {
                       {ok} image{ok !== 1 ? 's' : ''} saved{fail > 0 ? ` · ${fail} failed` : ''}
                     </span>
                   </div>
-                  {previews.length > 0 && (
-                    <button onClick={() => setLbIdx(0)}
-                      className="flex items-center gap-1.5 text-xs font-medium transition-colors"
-                      style={{ color: 'var(--violet)' }}>
-                      <Ic.Eye /> Preview
-                    </button>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {fail > 0 && (
+                      <button onClick={onRetryFailed}
+                        className="text-xs font-medium transition-colors"
+                        style={{ color: '#f59e0b' }}>
+                        ↻ Retry ({fail})
+                      </button>
+                    )}
+                    {previews.length > 0 && (
+                      <button onClick={() => setLbIdx(0)}
+                        className="flex items-center gap-1.5 text-xs font-medium transition-colors"
+                        style={{ color: 'var(--violet)' }}>
+                        <Ic.Eye /> Preview
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 

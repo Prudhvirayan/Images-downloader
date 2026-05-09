@@ -2,7 +2,15 @@ import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import { getFilenameFromUrl } from './urlParser'
 
-const CONCURRENCY = 6
+function getOptimalConcurrency() {
+  try {
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection
+    if (conn?.saveData || conn?.effectiveType === '2g') return 1
+    if (conn?.effectiveType === '3g') return 2
+  } catch {}
+  if (/mobile|android|iphone|ipad/i.test(navigator.userAgent)) return 3
+  return 6
+}
 
 async function fetchOne(url, signal) {
   try {
@@ -31,6 +39,7 @@ export function fetchWithPool(urls, { onProgress, onResult, signal }) {
     let inFlight = 0
     let completed = 0
 
+    const CONCURRENCY = getOptimalConcurrency()
     function pump() {
       while (inFlight < CONCURRENCY && nextIndex < urls.length) {
         if (signal?.aborted) break
