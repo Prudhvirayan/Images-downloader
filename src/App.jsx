@@ -123,7 +123,7 @@ function TbBtn({ onClick, title, children, wide=false, active=false }) {
   )
 }
 
-const SPEEDS = [2, 3, 5, 8, 10]
+const SPEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 function Lightbox({ images, startIndex, onClose }) {
   const [index, setIndex]       = useState(startIndex)
@@ -132,6 +132,7 @@ function Lightbox({ images, startIndex, onClose }) {
   const [speed, setSpeed]       = useState(3)
   const [isFS, setIsFS]         = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [flashIcon, setFlashIcon] = useState(null) // null | 'play' | 'pause'
   const [vt, setVt]             = useState({ x: 0, y: 0, scale: 1 })
 
   const vtRef   = useRef({ x: 0, y: 0, scale: 1 })
@@ -159,6 +160,13 @@ function Lightbox({ images, startIndex, onClose }) {
     return () => document.removeEventListener('fullscreenchange', fn)
   }, [])
 
+  // Auto-clear the play/pause flash icon after animation completes
+  useEffect(() => {
+    if (!flashIcon) return
+    const t = setTimeout(() => setFlashIcon(null), 700)
+    return () => clearTimeout(t)
+  }, [flashIcon])
+
   const toggleFS = useCallback(async () => {
     try {
       if (!document.fullscreenElement) await lbRef.current?.requestFullscreen()
@@ -173,7 +181,15 @@ function Lightbox({ images, startIndex, onClose }) {
       if (e.key === 'ArrowRight') next()
       if (e.key === 'r' || e.key === 'R') { resetView(); setRotation(r => (r + 90) % 360) }
       if (e.key === '0') { resetView(); setRotation(0) }
-      if (e.key === ' ') { e.preventDefault(); setPlaying(p => !p) }
+      if (e.key === ' ') {
+        e.preventDefault()
+        setPlaying(p => {
+          const next = !p
+          setFlashIcon(next ? 'play' : 'pause')
+          return next
+        })
+      }
+      if (/^[1-9]$/.test(e.key)) setSpeed(parseInt(e.key))
       if (e.key === 'f' || e.key === 'F') toggleFS()
     }
     window.addEventListener('keydown', onKey)
@@ -310,28 +326,39 @@ function Lightbox({ images, startIndex, onClose }) {
             {index + 1} / {total}
           </div>
         )}
+
+        {/* Play/pause flash — YouTube-style visual feedback, visible on Space press */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20"
+          style={{ opacity: flashIcon ? 1 : 0, transition: flashIcon ? 'opacity 0.05s ease' : 'opacity 0.6s ease' }}>
+          <div className="rounded-full p-5" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
+            {flashIcon === 'play'
+              ? <svg viewBox="0 0 24 24" fill="white" className="w-10 h-10"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              : <svg viewBox="0 0 24 24" fill="white" className="w-10 h-10"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>}
+          </div>
+        </div>
       </div>
 
       {/* Bottom bar — hidden in fullscreen */}
       {!isFS && (
         <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/8 flex-shrink-0" style={{ background: 'rgba(10,10,12,0.85)', backdropFilter: 'blur(12px)' }}>
           <div className="flex items-center gap-2">
-            <button onClick={() => setPlaying(p => !p)}
+            <button onClick={() => setPlaying(p => { const next = !p; setFlashIcon(next ? 'play' : 'pause'); return next })}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${playing ? 'bg-violet-600 text-white' : 'bg-white/8 text-white/60 hover:bg-white/12 hover:text-white border border-white/10'}`}>
               {playing ? <Ic.Pause /> : <Ic.Play />}
               {playing ? 'Pause' : 'Slideshow'}
             </button>
             <select value={speed} onChange={e => setSpeed(Number(e.target.value))}
-              className="bg-white/8 text-white/50 text-xs rounded-lg px-2 py-1.5 border border-white/10 outline-none hover:bg-white/12 cursor-pointer">
+              className="text-xs rounded-lg px-2 py-1.5 border outline-none cursor-pointer"
+              style={{ colorScheme: 'dark', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.55)', borderColor: 'rgba(255,255,255,0.10)' }}>
               {SPEEDS.map(s => <option key={s} value={s}>{s}s</option>)}
             </select>
             <button onClick={toggleFS} title="Fullscreen (F)"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/8 text-white/60 hover:bg-white/12 hover:text-white border border-white/10 transition-all">
-              <Ic.Fullscreen /> Full
+              <Ic.Fullscreen /> Fullscreen
             </button>
           </div>
           <p className="text-white/15 text-[11px] hidden md:block">
-            ← → &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; drag pan &nbsp;·&nbsp; R rotate &nbsp;·&nbsp; Space slideshow &nbsp;·&nbsp; F fullscreen
+            ← → navigate &nbsp;·&nbsp; Space play/pause &nbsp;·&nbsp; 1–9 speed &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; R rotate &nbsp;·&nbsp; F fullscreen
           </p>
         </div>
       )}
@@ -348,7 +375,7 @@ function ModeChip({ isSingle, isScanned, urls, parseError }) {
     <div className="flex items-center gap-1.5">
       <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
       <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-        {urls.length.toLocaleString()} images found on page
+        Found {urls.length.toLocaleString()} images on this page
       </span>
     </div>
   )
@@ -357,7 +384,7 @@ function ModeChip({ isSingle, isScanned, urls, parseError }) {
     <div className="flex items-center gap-1.5">
       <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: 'var(--violet)' }} />
       <span className="text-xs font-medium" style={{ color: 'var(--violet)' }}>
-        {urls.length.toLocaleString()} images &middot; sequence
+        Sequence &middot; {urls.length.toLocaleString()} images
       </span>
     </div>
   )
@@ -365,7 +392,7 @@ function ModeChip({ isSingle, isScanned, urls, parseError }) {
   return (
     <div className="flex items-center gap-1.5">
       <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: 'var(--text-3)' }} />
-      <span className="text-xs" style={{ color: 'var(--text-2)' }}>Single image</span>
+      <span className="text-xs" style={{ color: 'var(--text-2)' }}>Direct image link</span>
     </div>
   )
 }
@@ -491,6 +518,13 @@ export default function App() {
     try { localStorage.setItem('theme', dark ? 'dark' : 'light') } catch {}
   }, [dark])
 
+  const [autoSave, setAutoSave] = useState(() => {
+    try { return localStorage.getItem('autoSave') !== 'false' } catch { return true }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('autoSave', autoSave) } catch {}
+  }, [autoSave])
+
   const [template, setTemplate]     = useState('')
   const [urls, setUrls]             = useState([])
   const [parseError, setParseError] = useState(null)
@@ -554,10 +588,22 @@ export default function App() {
       },
     })
     if (ctrl.signal.aborted) { setPhase('idle'); return }
-    setPhase('zipping')
-    await buildAndDownloadZip(results, 'images.zip', setZipPct)
+    if (autoSave) {
+      setPhase('zipping')
+      await buildAndDownloadZip(results, 'images.zip', setZipPct)
+    }
     setPhase('done')
-  }, [urls, phase])
+  }, [urls, phase, autoSave])
+
+  // Re-ZIP images already in memory — no network call, instant
+  const onSaveAgain = useCallback(async () => {
+    const successful = statuses.filter(s => s?.ok && s.blob)
+    if (!successful.length) return
+    setPhase('zipping')
+    setZipPct(null)
+    await buildAndDownloadZip(successful, 'images.zip', setZipPct)
+    setPhase('done')
+  }, [statuses])
 
   const onRetryFailed = useCallback(async () => {
     const failedIndices = statuses.map((s, i) => (s && !s.ok) ? i : -1).filter(i => i >= 0)
@@ -634,7 +680,7 @@ export default function App() {
               Image Downloader
             </h1>
             <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
-              Single image, numbered sequence, or every photo on a page — saved as ZIP.
+              Save one image, an entire numbered series, or every photo from a gallery — all packaged into a ZIP.
             </p>
           </header>
 
@@ -652,10 +698,50 @@ export default function App() {
                     type="text"
                     value={template}
                     onChange={e => onInput(e.target.value)}
-                    placeholder="Paste image URL or website address"
+                    placeholder="Paste an image URL or gallery page address"
                     disabled={isBusy || phase === 'scanning'}
                     className="flex-1 px-3.5 py-2.5 text-sm bg-transparent outline-none min-w-0 disabled:opacity-50"
                     style={{ color: 'var(--text-1)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '13px' }}
+                    onKeyDown={e => {
+                      // Enter → trigger primary action
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        if (!urls.length || !!parseError || isBusy || phase === 'scanning') return
+                        if (phase === 'done' && ok > 0) onSaveAgain()
+                        else if (phase === 'idle') onDownload()
+                        return
+                      }
+                      // Smart bracket auto-complete: [ → [existing-content|] before next . or /
+                      if (e.key === '[' || e.key === '(') {
+                        const closing = e.key === '[' ? ']' : ')'
+                        const inp = e.target
+                        const s = inp.selectionStart
+                        const en = inp.selectionEnd
+                        e.preventDefault()
+                        const before   = template.slice(0, s)
+                        const selected = template.slice(s, en)
+                        const after    = template.slice(en)
+                        let next, cursorPos
+                        if (selected.length > 0) {
+                          // Wrap selected text with brackets, cursor after ]
+                          next = before + e.key + selected + closing + after
+                          cursorPos = s + selected.length + 2
+                        } else {
+                          // Find next . or / after cursor and place ] before it
+                          // e.g. image|1.jpg → image[1|].jpg
+                          const delimIdx = after.search(/[./]/)
+                          if (delimIdx >= 0) {
+                            next = before + e.key + after.slice(0, delimIdx) + closing + after.slice(delimIdx)
+                            cursorPos = s + 1 + delimIdx  // cursor right before ]
+                          } else {
+                            next = before + e.key + after + closing
+                            cursorPos = s + 1 + after.length  // cursor right before ] at end
+                          }
+                        }
+                        onInput(next)
+                        requestAnimationFrame(() => inp.setSelectionRange(cursorPos, cursorPos))
+                      }
+                    }}
                   />
                   {template && !isBusy && phase !== 'scanning' && (
                     <button
@@ -709,7 +795,7 @@ export default function App() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                   </svg>
-                  Scanning page for images…
+                  Looking for images on this page…
                 </div>
               )}
 
@@ -740,7 +826,7 @@ export default function App() {
                       <Ic.Check />
                     </div>
                     <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                      {ok} image{ok !== 1 ? 's' : ''} saved{fail > 0 ? ` · ${fail} failed` : ''}
+                      {ok} image{ok !== 1 ? 's' : ''} ready{fail > 0 ? ` · ${fail} failed` : ''}
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
@@ -748,7 +834,7 @@ export default function App() {
                       <button onClick={onRetryFailed}
                         className="text-xs font-medium transition-colors"
                         style={{ color: '#f59e0b' }}>
-                        ↻ Retry ({fail})
+                        ↻ Retry {fail} failed
                       </button>
                     )}
                     {previews.length > 0 && (
@@ -764,25 +850,43 @@ export default function App() {
 
               {/* Action buttons */}
               <div className="space-y-2 pt-1">
-                {/* Primary: download */}
-                {(!isSingle || isScanned) && urls.length > 0 && !parseError && (
-                  <button onClick={onDownload}
-                    disabled={isBusy || phase === 'scanning'}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+
+                {/* ── Phase: done — save from memory (no re-download) ── */}
+                {phase === 'done' && ok > 0 && (
+                  <button onClick={onSaveAgain}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all"
                     style={{ background: 'var(--violet)', boxShadow: '0 2px 8px rgba(124,58,237,0.25)' }}
-                    onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.opacity='0.9' }}
+                    onMouseEnter={e => e.currentTarget.style.opacity='0.9'}
                     onMouseLeave={e => e.currentTarget.style.opacity='1'}>
-                    {isBusy
-                      ? <>{phase === 'zipping' ? 'Packaging ZIP…' : `Downloading… ${done}/${urls.length}`}</>
-                      : <><Ic.Download /> Download All{urls.length > 0 ? ` (${urls.length.toLocaleString()})` : ''}</>}
+                    <Ic.Download /> Save as ZIP ({ok} image{ok !== 1 ? 's' : ''})
                   </button>
                 )}
 
-                {/* Single URL actions */}
-                {isSingle && !isScanned && urls.length > 0 && !parseError && phase === 'idle' && (
+                {/* ── Phase: busy — show progress in button ── */}
+                {isBusy && (
+                  <button disabled
+                    className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white opacity-80 cursor-not-allowed"
+                    style={{ background: 'var(--violet)' }}>
+                    {phase === 'zipping' ? 'Packaging ZIP…' : `Downloading… ${done}/${urls.length}`}
+                  </button>
+                )}
+
+                {/* ── Phase: idle — sequence or scanned ── */}
+                {phase === 'idle' && (!isSingle || isScanned) && urls.length > 0 && !parseError && (
+                  <button onClick={onDownload} disabled={phase === 'scanning'}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ background: 'var(--violet)', boxShadow: '0 2px 8px rgba(124,58,237,0.25)' }}
+                    onMouseEnter={e => e.currentTarget.style.opacity='0.9'}
+                    onMouseLeave={e => e.currentTarget.style.opacity='1'}>
+                    <Ic.Download /> Download All ({urls.length.toLocaleString()})
+                  </button>
+                )}
+
+                {/* ── Phase: idle — single URL: download + scan side by side ── */}
+                {phase === 'idle' && isSingle && !isScanned && urls.length > 0 && !parseError && (
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={onDownload} disabled={isBusy}
-                      className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40"
+                    <button onClick={onDownload}
+                      className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold text-white transition-all"
                       style={{ background: 'var(--violet)', boxShadow: '0 2px 8px rgba(124,58,237,0.2)' }}
                       onMouseEnter={e => e.currentTarget.style.opacity='0.9'}
                       onMouseLeave={e => e.currentTarget.style.opacity='1'}>
@@ -803,9 +907,7 @@ export default function App() {
                   {isBusy && (
                     <button onClick={onCancel}
                       className="flex-1 rounded-xl py-2.5 text-sm font-medium transition-all border"
-                      style={{ borderColor: 'var(--border-2)', color: 'var(--text-2)', background: 'transparent' }}
-                      onMouseEnter={e => e.currentTarget.style.borderColor='var(--border-2)'}
-                      onMouseLeave={e => {}}>
+                      style={{ borderColor: 'var(--border-2)', color: 'var(--text-2)', background: 'transparent' }}>
                       Cancel
                     </button>
                   )}
@@ -824,9 +926,28 @@ export default function App() {
               {/* Hint — only when empty */}
               {!template && (
                 <p className="text-[11px] leading-relaxed pt-1" style={{ color: 'var(--text-3)' }}>
-                  Paste a direct image URL, a URL with <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: 'var(--bg)', color: 'var(--text-2)' }}>[1-100]</code> for sequences, or any gallery page URL to scan for all images.
+                  For a numbered series, use <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: 'var(--bg)', color: 'var(--text-2)' }}>photo[1-50].jpg</code> — typing <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: 'var(--bg)', color: 'var(--text-2)' }}>[</code> auto-adds the closing bracket. For a full gallery, paste the page URL and tap <strong style={{ color: 'var(--text-2)', fontWeight: 600 }}>Scan Page</strong>. Press <kbd className="px-1 py-0.5 rounded text-[10px]" style={{ background: 'var(--bg)', color: 'var(--text-2)' }}>↵</kbd> to start.
                 </p>
               )}
+
+              {/* Auto-save toggle */}
+              <div className="flex items-center justify-between pt-1">
+                <div>
+                  <p className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Auto-save</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                    {autoSave ? 'ZIP saves automatically when finished' : "Preview first, save whenever you’re ready"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setAutoSave(a => !a)}
+                  title={autoSave ? 'Auto-save on' : 'Auto-save off'}
+                  className="flex-shrink-0 w-9 h-5 rounded-full relative transition-colors duration-200 ml-4"
+                  style={{ background: autoSave ? 'var(--violet)' : 'var(--border-2)' }}>
+                  <span
+                    className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200"
+                    style={{ left: '2px', transform: autoSave ? 'translateX(16px)' : 'translateX(0)' }} />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -834,7 +955,7 @@ export default function App() {
           {statuses.filter(Boolean).length > 0 && (
             <div className="mt-3 rounded-2xl border overflow-hidden" style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
-                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Results</span>
+                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Downloads</span>
                 <div className="flex items-center gap-3">
                   {ok > 0 && (
                     <button onClick={() => previews.length > 0 && setLbIdx(0)}

@@ -1,10 +1,11 @@
-const BRACKET_RE = /\[(\d+)-(\d+)\]/
+// Matches [n-m] or (n-m) — parentheses supported as mobile-friendly alternative
+const BRACKET_RE = /[\[(](\d+)-(\d+)[\])]/
 
 export function parseUrlTemplate(template) {
   const trimmed = template.trim()
   if (!trimmed) return { error: null, urls: [], single: false }
 
-  // No [start-end] bracket — treat as a single direct URL
+  // No [start-end] or (start-end) bracket — treat as a single direct URL
   const match = BRACKET_RE.exec(trimmed)
   if (!match) {
     if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
