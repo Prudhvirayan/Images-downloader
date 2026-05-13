@@ -368,17 +368,22 @@ function Lightbox({ images, startIndex, onClose }) {
 }
 
 // ─── Mode Chip ────────────────────────────────────────────────────────────────
-function ModeChip({ isSingle, isScanned, urls, parseError }) {
+function ModeChip({ isSingle, isScanned, isWistia, isWebPage, urls, parseError, videoCount = 0 }) {
   if (!urls.length || parseError) return null
 
-  if (isScanned) return (
-    <div className="flex items-center gap-1.5">
-      <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
-      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-        Found {urls.length.toLocaleString()} images on this page
-      </span>
-    </div>
-  )
+  if (isScanned) {
+    const imgPart = urls.length > 0 ? `${urls.length.toLocaleString()} image${urls.length !== 1 ? 's' : ''}` : null
+    const vidPart = videoCount > 0 ? `${videoCount} video${videoCount !== 1 ? 's' : ''}` : null
+    const summary = [imgPart, vidPart].filter(Boolean).join(' · ')
+    return (
+      <div className="flex items-center gap-1.5">
+        <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+          Found {summary} on this page
+        </span>
+      </div>
+    )
+  }
 
   if (!isSingle) return (
     <div className="flex items-center gap-1.5">
@@ -389,10 +394,107 @@ function ModeChip({ isSingle, isScanned, urls, parseError }) {
     </div>
   )
 
+  if (isWistia) return (
+    <div className="flex items-center gap-1.5">
+      <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: '#60a5fa' }} />
+      <span className="text-xs font-medium" style={{ color: '#60a5fa' }}>Wistia video — resolves to direct MP4</span>
+    </div>
+  )
+
+  if (isWebPage) return (
+    <div className="flex items-center gap-1.5">
+      <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: '#f59e0b' }} />
+      <span className="text-xs font-medium" style={{ color: '#d97706' }}>Web page — use Scan to find images &amp; videos</span>
+    </div>
+  )
+
   return (
     <div className="flex items-center gap-1.5">
       <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: 'var(--text-3)' }} />
       <span className="text-xs" style={{ color: 'var(--text-2)' }}>Direct image link</span>
+    </div>
+  )
+}
+
+// ─── Video Card ───────────────────────────────────────────────────────────────
+const PLATFORM_LABELS = { wistia: 'Wistia', youtube: 'YouTube', vimeo: 'Vimeo', loom: 'Loom', direct: 'Direct' }
+const PLATFORM_COLORS = { wistia: '#60a5fa', youtube: '#f87171', vimeo: '#a78bfa', loom: '#34d399', direct: 'var(--text-2)' }
+const CAN_DOWNLOAD    = new Set(['wistia', 'direct'])
+
+function VideoCard({ video }) {
+  const [resolving, setResolving] = useState(false)
+  const [resolved, setResolved]   = useState(video.directUrl ? video : null)
+  const [err, setErr]             = useState(null)
+
+  const label = PLATFORM_LABELS[video.platform] || video.platform
+  const color = PLATFORM_COLORS[video.platform] || 'var(--text-2)'
+  const canDownload = CAN_DOWNLOAD.has(video.platform)
+
+  async function handleResolve() {
+    if (!video.wistiaHash) return
+    setResolving(true); setErr(null)
+    try {
+      const res  = await fetch(`/api/resolve-wistia?hash=${video.wistiaHash}`)
+      const data = await res.json()
+      if (!res.ok || data.error) { setErr(data.error || 'Could not resolve'); return }
+      setResolved(data)
+    } catch (e) { setErr(e.message) }
+    finally { setResolving(false) }
+  }
+
+  const title   = resolved?.title || video.title || null
+  const dims    = resolved?.width && resolved?.height ? `${resolved.width}×${resolved.height}` : null
+  const dur     = resolved?.duration ? `${Math.floor(resolved.duration / 60)}:${String(resolved.duration % 60).padStart(2,'0')}` : null
+  const meta    = [dims, dur].filter(Boolean).join(' · ')
+
+  return (
+    <div className="flex items-start gap-3 px-4 py-3 border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
+      {/* Platform badge */}
+      <div className="flex-shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: `${color}18`, color }}>
+        {label}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>
+          {title || (video.wistiaHash ? `Wistia ${video.wistiaHash}` : video.url)}
+        </p>
+        {meta && <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{meta}</p>}
+        {err && <p className="text-[11px] mt-0.5 text-rose-400">{err}</p>}
+      </div>
+
+      {/* Actions */}
+      <div className="flex-shrink-0 flex flex-col gap-1.5">
+        {canDownload && resolved?.directUrl ? (
+          <>
+            {/* Preview — streams in new tab */}
+            <a href={resolved.directUrl} target="_blank" rel="noopener noreferrer"
+              className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-opacity hover:opacity-80"
+              style={{ borderColor: 'var(--border-2)', color: 'var(--text-2)' }}>
+              Preview ↗
+            </a>
+            {/* Download — routes via same-origin proxy so the download attribute works */}
+            <a href={`/api/proxy?url=${encodeURIComponent(resolved.directUrl)}`}
+              download={`${resolved.title || video.title || 'video'}.mp4`}
+              className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-white transition-opacity hover:opacity-90"
+              style={{ background: 'var(--violet)' }}>
+              <Ic.Download /> Download
+            </a>
+          </>
+        ) : canDownload && video.wistiaHash ? (
+          <button onClick={handleResolve} disabled={resolving}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-opacity hover:opacity-80 disabled:opacity-50 border"
+            style={{ borderColor: color, color, background: `${color}12` }}>
+            {resolving ? '…' : 'Resolve'}
+          </button>
+        ) : (
+          <a href={video.embedUrl || video.url} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-opacity hover:opacity-80"
+            style={{ borderColor: 'var(--border-2)', color: 'var(--text-2)' }}>
+            Watch ↗
+          </a>
+        )}
+      </div>
     </div>
   )
 }
@@ -506,6 +608,45 @@ function UrlActionBtn({ template, onPaste, disabled }) {
   )
 }
 
+// ─── URL Preview List (expandable) ───────────────────────────────────────────
+function UrlPreviewList({ urls }) {
+  const [expanded, setExpanded] = useState(false)
+  const MAX = 3
+  const visible = expanded || urls.length <= MAX + 1 ? urls : urls.slice(0, MAX)
+  const hiddenCount = urls.length - MAX - 1
+
+  return (
+    <div className="rounded-xl px-3 py-2.5 text-[11px] font-mono space-y-0.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+      {visible.map((u, i) =>
+        <a key={i} href={u} target="_blank" rel="noopener noreferrer"
+          className="truncate block hover:underline"
+          style={{ color: 'var(--text-2)' }} title={u}>{u}</a>
+      )}
+      {!expanded && hiddenCount > 0 && (
+        <>
+          <button onClick={() => setExpanded(true)}
+            className="text-left hover:underline"
+            style={{ color: 'var(--violet)' }}>
+            + {hiddenCount.toLocaleString()} more — tap to expand
+          </button>
+          <a href={urls[urls.length - 1]} target="_blank" rel="noopener noreferrer"
+            className="truncate block hover:underline"
+            style={{ color: 'var(--text-2)' }} title={urls[urls.length - 1]}>
+            {urls[urls.length - 1]}
+          </a>
+        </>
+      )}
+      {expanded && urls.length > MAX + 1 && (
+        <button onClick={() => setExpanded(false)}
+          className="text-left hover:underline"
+          style={{ color: 'var(--text-3)' }}>
+          collapse
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 const MAX_PREV = 3
 
@@ -530,9 +671,12 @@ export default function App() {
   const [parseError, setParseError] = useState(null)
   const [isSingle, setIsSingle]     = useState(false)
   const [isScanned, setIsScanned]   = useState(false)
+  const [isWistia, setIsWistia]     = useState(false)
+  const [isWebPage, setIsWebPage]   = useState(false)
 
   const [phase, setPhase]           = useState('idle')
   const [scanError, setScanError]   = useState(null)
+  const [scannedVideos, setScannedVideos] = useState([])
   const [statuses, setStatuses]     = useState([])
   const [done, setDone]             = useState(0)
   const [zipPct, setZipPct]         = useState(null)
@@ -541,14 +685,22 @@ export default function App() {
   const abortRef   = useRef(null)
   const objUrlsRef = useRef([])
 
+  const WISTIA_URL_RE  = /wistia\.com\/(?:embed\/medias|medias)\/([a-zA-Z0-9]+)/
+  const IMG_EXT_RE_SMP = /\.(jpe?g|png|gif|webp|avif|bmp|svg)(\?.*)?$/i
+
   const onInput = useCallback((value) => {
     setTemplate(value)
     setScanError(null)
     setIsScanned(false)
+    setScannedVideos([])
     const { error, urls: parsed, single } = parseUrlTemplate(value)
     setParseError(error)
     setUrls(parsed)
     setIsSingle(single)
+    const wistia = single && WISTIA_URL_RE.test(value)
+    setIsWistia(wistia)
+    // A single URL that doesn't look like a direct image file is a web page
+    setIsWebPage(single && !wistia && !IMG_EXT_RE_SMP.test(value.split('?')[0]))
   }, [])
 
   const onPaste = useCallback(async () => {
@@ -562,8 +714,14 @@ export default function App() {
       const res  = await fetch(`/api/scan?url=${encodeURIComponent(urls[0])}`)
       const data = await res.json()
       if (!res.ok || data.error) { setScanError(data.error || 'Scan failed'); setPhase('idle'); return }
-      if (!data.images?.length)  { setScanError('No images found. Try a page with photos or a gallery.'); setPhase('idle'); return }
-      setUrls(data.images); setIsSingle(false); setIsScanned(true)
+      const hasImages = data.images?.length > 0
+      const hasVideos = data.videos?.length > 0
+      if (!hasImages && !hasVideos) {
+        setScanError("Nothing found in the page source. If you see a video in your browser, it may load via JavaScript — try pasting the Wistia media URL directly.")
+        setPhase('idle'); return
+      }
+      setUrls(data.images || []); setIsSingle(false); setIsScanned(true)
+      setScannedVideos(data.videos || [])
     } catch (e) { setScanError(`Scan failed: ${e.message}`) }
     finally { setPhase('idle') }
   }, [urls, phase])
@@ -637,7 +795,7 @@ export default function App() {
     abortRef.current?.abort()
     objUrlsRef.current.forEach(u => URL.revokeObjectURL(u)); objUrlsRef.current = []
     setTemplate(''); setUrls([]); setParseError(null); setScanError(null)
-    setIsSingle(false); setIsScanned(false)
+    setIsSingle(false); setIsScanned(false); setIsWistia(false); setIsWebPage(false); setScannedVideos([])
     setPhase('idle'); setStatuses([]); setDone(0); setZipPct(null); setLbIdx(null)
   }, [])
 
@@ -677,10 +835,10 @@ export default function App() {
               <Ic.Photo cls="w-5 h-5 text-white" />
             </div>
             <h1 className="text-[28px] font-semibold tracking-tight leading-tight" style={{ color: 'var(--text-1)', letterSpacing: '-0.5px' }}>
-              Image Downloader
+              Image &amp; Video Downloader
             </h1>
             <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
-              Save one image, an entire numbered series, or every photo from a gallery — all packaged into a ZIP.
+              Download images or videos — one file, a numbered series, or everything on a page.
             </p>
           </header>
 
@@ -763,21 +921,13 @@ export default function App() {
 
                 {/* Mode chip */}
                 <div className="h-5 flex items-center">
-                  <ModeChip isSingle={isSingle} isScanned={isScanned} urls={urls} parseError={parseError} />
+                  <ModeChip isSingle={isSingle} isScanned={isScanned} isWistia={isWistia} isWebPage={isWebPage} urls={urls} parseError={parseError} videoCount={scannedVideos.length} />
                 </div>
               </div>
 
               {/* URL sequence preview */}
               {urls.length > 1 && !parseError && (
-                <div className="rounded-xl px-3 py-2.5 text-[11px] font-mono space-y-0.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                  {previewList.map((u, i) =>
-                    u === null
-                      ? <div key="el" style={{ color: 'var(--text-3)' }}>… {(urls.length - MAX_PREV - 1).toLocaleString()} more</div>
-                      : <a key={i} href={u} target="_blank" rel="noopener noreferrer"
-                          className="truncate block hover:underline"
-                          style={{ color: 'var(--text-2)' }} title={u}>{u}</a>
-                  )}
-                </div>
+                <UrlPreviewList urls={urls} />
               )}
 
               {/* Errors */}
@@ -882,24 +1032,45 @@ export default function App() {
                   </button>
                 )}
 
-                {/* ── Phase: idle — single URL: download + scan side by side ── */}
+                {/* ── Phase: idle — single URL: context-aware buttons ── */}
                 {phase === 'idle' && isSingle && !isScanned && urls.length > 0 && !parseError && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <button onClick={onDownload}
-                      className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold text-white transition-all"
-                      style={{ background: 'var(--violet)', boxShadow: '0 2px 8px rgba(124,58,237,0.2)' }}
-                      onMouseEnter={e => e.currentTarget.style.opacity='0.9'}
-                      onMouseLeave={e => e.currentTarget.style.opacity='1'}>
-                      <Ic.Download /> Download
-                    </button>
-                    <button onClick={onScan}
-                      className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-medium transition-all border"
-                      style={{ background: 'var(--violet-bg)', borderColor: 'var(--violet-border)', color: 'var(--violet)' }}
-                      onMouseEnter={e => e.currentTarget.style.opacity='0.85'}
-                      onMouseLeave={e => e.currentTarget.style.opacity='1'}>
-                      <Ic.Scan /> Find All Images
-                    </button>
-                  </div>
+                  isWebPage ? (
+                    // Web page → Scan is the primary action; Download is secondary fallback
+                    <div className="space-y-2">
+                      <button onClick={onScan}
+                        className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all"
+                        style={{ background: 'var(--violet)', boxShadow: '0 2px 8px rgba(124,58,237,0.25)' }}
+                        onMouseEnter={e => e.currentTarget.style.opacity='0.9'}
+                        onMouseLeave={e => e.currentTarget.style.opacity='1'}>
+                        <Ic.Scan /> Scan for Images &amp; Videos
+                      </button>
+                      <button onClick={onDownload}
+                        className="w-full flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-all border"
+                        style={{ borderColor: 'var(--border)', color: 'var(--text-2)', background: 'transparent' }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor='var(--border-2)'}
+                        onMouseLeave={e => e.currentTarget.style.borderColor='var(--border)'}>
+                        <Ic.Download /> Try direct download instead
+                      </button>
+                    </div>
+                  ) : (
+                    // Direct image or Wistia → Download is primary
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={onDownload}
+                        className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold text-white transition-all"
+                        style={{ background: 'var(--violet)', boxShadow: '0 2px 8px rgba(124,58,237,0.2)' }}
+                        onMouseEnter={e => e.currentTarget.style.opacity='0.9'}
+                        onMouseLeave={e => e.currentTarget.style.opacity='1'}>
+                        <Ic.Download /> {isWistia ? 'Resolve Video' : 'Download'}
+                      </button>
+                      <button onClick={onScan}
+                        className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-medium transition-all border"
+                        style={{ background: 'var(--violet-bg)', borderColor: 'var(--violet-border)', color: 'var(--violet)' }}
+                        onMouseEnter={e => e.currentTarget.style.opacity='0.85'}
+                        onMouseLeave={e => e.currentTarget.style.opacity='1'}>
+                        <Ic.Scan /> Scan Page
+                      </button>
+                    </div>
+                  )
                 )}
 
                 {/* Secondary: cancel / clear */}
@@ -926,7 +1097,7 @@ export default function App() {
               {/* Hint — only when empty */}
               {!template && (
                 <p className="text-[11px] leading-relaxed pt-1" style={{ color: 'var(--text-3)' }}>
-                  For a numbered series, use <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: 'var(--bg)', color: 'var(--text-2)' }}>photo[1-50].jpg</code> — typing <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: 'var(--bg)', color: 'var(--text-2)' }}>[</code> auto-adds the closing bracket. For a full gallery, paste the page URL and tap <strong style={{ color: 'var(--text-2)', fontWeight: 600 }}>Scan Page</strong>. Press <kbd className="px-1 py-0.5 rounded text-[10px]" style={{ background: 'var(--bg)', color: 'var(--text-2)' }}>↵</kbd> to start.
+                  For a numbered series, use <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: 'var(--bg)', color: 'var(--text-2)' }}>photo[1-50].jpg</code> — typing <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: 'var(--bg)', color: 'var(--text-2)' }}>[</code> auto-adds the bracket. Paste any page URL and tap <strong style={{ color: 'var(--text-2)', fontWeight: 600 }}>Scan</strong> to find all images and videos. Paste a Wistia video URL to download it directly.
                 </p>
               )}
 
@@ -950,6 +1121,19 @@ export default function App() {
               </div>
             </div>
           </div>
+
+          {/* ── Videos found via scan ── */}
+          {scannedVideos.length > 0 && (
+            <div className="mt-3 rounded-2xl border overflow-hidden" style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+              <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
+                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                  Videos found ({scannedVideos.length})
+                </span>
+                <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>Wistia videos resolve to direct MP4</span>
+              </div>
+              {scannedVideos.map((v, i) => <VideoCard key={i} video={v} />)}
+            </div>
+          )}
 
           {/* ── Results ── */}
           {statuses.filter(Boolean).length > 0 && (

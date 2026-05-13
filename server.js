@@ -25,6 +25,8 @@ const JUNK_FILENAME_RE = /logo|favicon|icon|sprite|banner|avatar|thumb-placehold
 const WP_DIM_RE = /[-_](\d{2,4})[x×](\d{2,4})(?:-\w+)?\.(jpe?g|png|webp|gif)(\?.*)?$/i
 const MIN_QUALITY_DIM = 600 // skip thumbnails smaller than this in any dimension
 
+const VIDEO_EXT_RE = /\.(mp4|webm|mov|m4v)(\?[^"']*)?$/i
+
 const BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   'Accept-Language': 'en-US,en;q=0.9',
@@ -226,6 +228,105 @@ function extractAllImagesFromHtml(html, pageUrl) {
   return deduped.map((i) => i.url)
 }
 
+// ─── Video detection ──────────────────────────────────────────────────────────
+
+function extractVideosFromHtml(html, pageUrl) {
+  const $ = cheerioLoad(html)
+  const seen = new Set()
+  const videos = []
+
+  // 1. <video> tags
+  $('video').each((_, el) => {
+    const $el = $(el)
+    const src = resolveUrl($el.attr('src'), pageUrl)
+    if (src && !seen.has(src)) { seen.add(src); videos.push({ platform: 'direct', url: src, directUrl: src }) }
+    $el.find('source[src]').each((__, s) => {
+      const u = resolveUrl($(s).attr('src'), pageUrl)
+      if (u && !seen.has(u)) { seen.add(u); videos.push({ platform: 'direct', url: u, directUrl: u }) }
+    })
+  })
+
+  // 2. Direct video file links
+  $('a[href]').each((_, el) => {
+    const u = resolveUrl($(el).attr('href'), pageUrl)
+    if (u && VIDEO_EXT_RE.test(u) && !seen.has(u)) {
+      seen.add(u); videos.push({ platform: 'direct', url: u, directUrl: u })
+    }
+  })
+
+  // 3. Wistia embed divs: class="wistia_async_HASH"
+  $('[class*="wistia_async_"]').each((_, el) => {
+    const m = ($(el).attr('class') || '').match(/wistia_async_([a-zA-Z0-9]+)/)
+    if (m && !seen.has(m[1])) {
+      seen.add(m[1])
+      videos.push({ platform: 'wistia', url: `https://home.wistia.com/medias/${m[1]}`, wistiaHash: m[1] })
+    }
+  })
+
+  // 4. Wistia hashes anywhere in HTML source (both wistia.com and wistia.net patterns)
+  const wRe = /wistia\.(?:com|net)\/(?:embed\/(?:medias|iframe)|medias)\/([a-zA-Z0-9]+)/g
+  let wm
+  while ((wm = wRe.exec(html)) !== null) {
+    if (!seen.has(wm[1])) {
+      seen.add(wm[1])
+      videos.push({ platform: 'wistia', url: `https://home.wistia.com/medias/${wm[1]}`, wistiaHash: wm[1] })
+    }
+  }
+
+  // 5. YouTube / Vimeo / Loom / Wistia iframes
+  for (const [sel, platform] of [
+    ['iframe[src*="youtube.com/embed"], iframe[src*="youtu.be"]', 'youtube'],
+    ['iframe[src*="player.vimeo.com"]', 'vimeo'],
+    ['iframe[src*="loom.com/embed"]', 'loom'],
+    ['iframe[src*="wistia.com"], iframe[src*="wistia.net"]', 'wistia'],
+  ]) {
+    $(sel).each((_, el) => {
+      const src = $(el).attr('src') || ''
+      if (!src) return
+      // For Wistia iframes, extract the hash and skip if section 4 already found it
+      if (platform === 'wistia') {
+        const hm = src.match(/embed\/(?:iframe|medias)\/([a-zA-Z0-9]+)/)
+        const hash = hm?.[1]
+        if (hash && seen.has(hash)) return  // already found by regex scan, skip duplicate
+        if (seen.has(src)) return
+        seen.add(src)
+        if (hash) seen.add(hash)
+        videos.push({ platform, url: src, embedUrl: src, ...(hash ? { wistiaHash: hash } : {}) })
+        return
+      }
+      if (!seen.has(src)) { seen.add(src); videos.push({ platform, url: src, embedUrl: src }) }
+    })
+  }
+
+  // 6. og:video meta
+  $('meta[property="og:video"]').each((_, el) => {
+    const u = resolveUrl($(el).attr('content'), pageUrl)
+    if (u && !seen.has(u)) { seen.add(u); videos.push({ platform: 'direct', url: u, directUrl: u }) }
+  })
+
+  return videos
+}
+
+async function resolveWistiaVideo(hash) {
+  try {
+    const res = await fetch(`https://fast.wistia.com/embed/medias/${hash}.json`, { headers: BROWSER_HEADERS })
+    if (!res.ok) return null
+    const data = await res.json()
+    const assets = data?.media?.assets || []
+    const mp4 = assets
+      .filter(a => a.ext === 'mp4' || a.type === 'original')
+      .sort((a, b) => (b.width || 0) - (a.width || 0))[0]
+    if (!mp4) return null
+    return {
+      directUrl: mp4.url,
+      title: data?.media?.name || null,
+      width: mp4.width || null,
+      height: mp4.height || null,
+      duration: Math.round(data?.media?.duration || 0) || null,
+    }
+  } catch { return null }
+}
+
 async function fetchImageFromUrl(targetUrl) {
   const parsed = new URL(targetUrl)
   const referer = parsed.origin + '/'
@@ -322,14 +423,68 @@ app.get('/api/scan', async (req, res) => {
     }
 
     if (contentType.includes('text/html') || contentType.includes('application/xhtml')) {
-      const html = await response.text()
-      const images = extractAllImagesFromHtml(html, url)
-      return res.json({ images, count: images.length })
+      let html = await response.text()
+
+      // If the first pass finds nothing (JS-rendered SPA), retry with Googlebot UA.
+      // Salesforce Experience Cloud, Next.js and many SPAs serve pre-rendered HTML
+      // to search crawlers for SEO — this often contains Wistia embed codes.
+      let images = extractAllImagesFromHtml(html, url)
+      let rawVideos = extractVideosFromHtml(html, url)
+
+      // Always retry with Googlebot when no videos found — SPAs (Salesforce, Next.js, etc.)
+      // return browser images (static assets) but hide video embeds from regular crawlers.
+      // Googlebot triggers SSR/pre-rendering that exposes Wistia embed codes.
+      if (rawVideos.length === 0) {
+        try {
+          const gbHeaders = {
+            'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+            'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': referer,
+          }
+          const gbRes = await fetch(url, { headers: gbHeaders, redirect: 'follow' })
+          if (gbRes.ok) {
+            const gbHtml   = await gbRes.text()
+            const gbVideos = extractVideosFromHtml(gbHtml, url)
+            if (gbVideos.length > 0) {
+              rawVideos = gbVideos
+              // Only replace images if the browser scan found none
+              if (images.length === 0) images = extractAllImagesFromHtml(gbHtml, url)
+            }
+          }
+        } catch {}
+      }
+
+      // Resolve Wistia hashes to direct MP4 URLs in parallel
+      const videos = await Promise.all(
+        rawVideos.map(async v => {
+          if (v.platform === 'wistia' && v.wistiaHash) {
+            const resolved = await resolveWistiaVideo(v.wistiaHash)
+            return resolved ? { ...v, ...resolved } : v
+          }
+          return v
+        })
+      )
+
+      return res.json({ images, videos: videos.filter(v => v.platform !== 'wistia' || v.directUrl || v.embedUrl), count: images.length })
     }
 
     return res.status(415).json({ error: `Cannot scan content-type: ${contentType}` })
   } catch (err) {
     console.error('Scan error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Resolve a Wistia media hash to a direct MP4 URL
+app.get('/api/resolve-wistia', async (req, res) => {
+  const { hash } = req.query
+  if (!hash || !/^[a-zA-Z0-9]+$/.test(hash)) return res.status(400).json({ error: 'Invalid or missing hash' })
+  try {
+    const resolved = await resolveWistiaVideo(hash)
+    if (!resolved) return res.status(404).json({ error: 'Could not resolve this Wistia video. Check the hash and try again.' })
+    res.json({ ...resolved, hash })
+  } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })

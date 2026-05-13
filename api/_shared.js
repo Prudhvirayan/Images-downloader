@@ -9,6 +9,7 @@ const JUNK_URL_RE      = /favicon|sprite|1x1|tracking|placeholder|blank|spacer|s
 const JUNK_FILENAME_RE = /logo|favicon|icon|sprite|banner|avatar|thumb-placeholder/i
 const WP_DIM_RE        = /[-_](\d{2,4})[x×](\d{2,4})(?:-\w+)?\.(jpe?g|png|webp|gif)(\?.*)?$/i
 const MIN_QUALITY_DIM  = 600
+const VIDEO_EXT_RE     = /\.(mp4|webm|mov|m4v)(\?[^"']*)?$/i
 
 export const BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -179,6 +180,96 @@ export function extractAllImagesFromHtml(html, pageUrl) {
   const deduped = Array.from(byBase.values())
   deduped.sort((a, b) => b.score - a.score)
   return deduped.map(i => i.url)
+}
+
+export function extractVideosFromHtml(html, pageUrl) {
+  const $ = cheerioLoad(html)
+  const seen = new Set()
+  const videos = []
+
+  $('video').each((_, el) => {
+    const $el = $(el)
+    const src = resolveUrl($el.attr('src'), pageUrl)
+    if (src && !seen.has(src)) { seen.add(src); videos.push({ platform: 'direct', url: src, directUrl: src }) }
+    $el.find('source[src]').each((__, s) => {
+      const u = resolveUrl($(s).attr('src'), pageUrl)
+      if (u && !seen.has(u)) { seen.add(u); videos.push({ platform: 'direct', url: u, directUrl: u }) }
+    })
+  })
+
+  $('a[href]').each((_, el) => {
+    const u = resolveUrl($(el).attr('href'), pageUrl)
+    if (u && VIDEO_EXT_RE.test(u) && !seen.has(u)) {
+      seen.add(u); videos.push({ platform: 'direct', url: u, directUrl: u })
+    }
+  })
+
+  $('[class*="wistia_async_"]').each((_, el) => {
+    const m = ($(el).attr('class') || '').match(/wistia_async_([a-zA-Z0-9]+)/)
+    if (m && !seen.has(m[1])) {
+      seen.add(m[1])
+      videos.push({ platform: 'wistia', url: `https://home.wistia.com/medias/${m[1]}`, wistiaHash: m[1] })
+    }
+  })
+
+  const wRe = /wistia\.(?:com|net)\/(?:embed\/(?:medias|iframe)|medias)\/([a-zA-Z0-9]+)/g
+  let wm
+  while ((wm = wRe.exec(html)) !== null) {
+    if (!seen.has(wm[1])) {
+      seen.add(wm[1])
+      videos.push({ platform: 'wistia', url: `https://home.wistia.com/medias/${wm[1]}`, wistiaHash: wm[1] })
+    }
+  }
+
+  for (const [sel, platform] of [
+    ['iframe[src*="youtube.com/embed"], iframe[src*="youtu.be"]', 'youtube'],
+    ['iframe[src*="player.vimeo.com"]', 'vimeo'],
+    ['iframe[src*="loom.com/embed"]', 'loom'],
+    ['iframe[src*="wistia.com"], iframe[src*="wistia.net"]', 'wistia'],
+  ]) {
+    $(sel).each((_, el) => {
+      const src = $(el).attr('src') || ''
+      if (!src) return
+      if (platform === 'wistia') {
+        const hm = src.match(/embed\/(?:iframe|medias)\/([a-zA-Z0-9]+)/)
+        const hash = hm?.[1]
+        if (hash && seen.has(hash)) return
+        if (seen.has(src)) return
+        seen.add(src)
+        if (hash) seen.add(hash)
+        videos.push({ platform, url: src, embedUrl: src, ...(hash ? { wistiaHash: hash } : {}) })
+        return
+      }
+      if (!seen.has(src)) { seen.add(src); videos.push({ platform, url: src, embedUrl: src }) }
+    })
+  }
+
+  $('meta[property="og:video"]').each((_, el) => {
+    const u = resolveUrl($(el).attr('content'), pageUrl)
+    if (u && !seen.has(u)) { seen.add(u); videos.push({ platform: 'direct', url: u, directUrl: u }) }
+  })
+
+  return videos
+}
+
+export async function resolveWistiaVideo(hash) {
+  try {
+    const res = await fetch(`https://fast.wistia.com/embed/medias/${hash}.json`, { headers: BROWSER_HEADERS })
+    if (!res.ok) return null
+    const data = await res.json()
+    const assets = data?.media?.assets || []
+    const mp4 = assets
+      .filter(a => a.ext === 'mp4' || a.type === 'original')
+      .sort((a, b) => (b.width || 0) - (a.width || 0))[0]
+    if (!mp4) return null
+    return {
+      directUrl: mp4.url,
+      title: data?.media?.name || null,
+      width: mp4.width || null,
+      height: mp4.height || null,
+      duration: Math.round(data?.media?.duration || 0) || null,
+    }
+  } catch { return null }
 }
 
 export async function fetchImageFromUrl(targetUrl) {
