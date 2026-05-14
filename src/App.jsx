@@ -768,7 +768,7 @@ export default function App() {
       const res  = await fetch(`/api/scan?url=${encodeURIComponent(urls[0])}`)
       const contentType = res.headers.get('content-type') || ''
       if (!contentType.includes('application/json')) {
-        setScanError('Scan API is unavailable on this deployment. Use the Vercel URL for full-page scans; GitHub Pages can only serve the static app.')
+        setScanError('Scan API is unavailable on this deployment. Redeploy on Vercel with the /api functions, or run npm run dev locally so the API server starts.')
         setPhase('idle')
         return
       }
@@ -784,7 +784,12 @@ export default function App() {
       setScannedImages(data.images || [])
       setUrls([]); setIsSingle(false); setIsScanned(true); setQualityOnly(true)
       setScannedVideos(data.videos || [])
-    } catch (e) { setScanError(`Scan failed: ${e.message}`) }
+    } catch (e) {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      setScanError(isLocal
+        ? 'Scan failed: local API server is not reachable. Start the app with npm run dev, not vite by itself.'
+        : `Scan failed: ${e.message}`)
+    }
     finally { setPhase('idle') }
   }, [urls, phase])
 
