@@ -42,8 +42,7 @@
   }
 
   body {
-    background: var(--gradient-bg);
-    background-attachment: fixed;
+    background-color: var(--bg);
     color: var(--text-1);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     transition: background-color 0.2s, color 0.2s;

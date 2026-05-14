@@ -890,7 +890,7 @@ export default function App() {
         <Lightbox images={previews} startIndex={Math.min(lbIdx, previews.length - 1)} onClose={() => setLbIdx(null)} />
       )}
 
-      <div className="flex flex-col items-center px-3 sm:px-4 pt-20 pb-16 min-h-screen">
+      <div className="flex flex-col items-center px-3 sm:px-4 pt-20 pb-16 min-h-screen" style={{ background: 'var(--gradient-bg)' }}>
         <div className="w-full max-w-[480px] md:max-w-[520px]">
 
           {/* ── Header ── */}
@@ -910,7 +910,7 @@ export default function App() {
 
           {/* ── Input card ── */}
           <div className="rounded-2xl border overflow-hidden transition-shadow duration-200 input-card" style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-3">
 
               {/* URL input */}
               <div className="space-y-1.5">
@@ -984,10 +984,12 @@ export default function App() {
                   />
                 </div>
 
-                {/* Mode chip */}
-                <div className="h-5 flex items-center">
-                  <ModeChip isSingle={isSingle} isScanned={isScanned} isWistia={isWistia} isWebPage={isWebPage} urls={displayUrls} parseError={parseError} videoCount={scannedVideos.length} />
-                </div>
+                {/* Mode chip — only renders when there's URL content */}
+                {template && (
+                  <div className="flex items-center">
+                    <ModeChip isSingle={isSingle} isScanned={isScanned} isWistia={isWistia} isWebPage={isWebPage} urls={displayUrls} parseError={parseError} videoCount={scannedVideos.length} />
+                  </div>
+                )}
               </div>
 
               {/* Image quality filter chips — only after a scan */}
@@ -1091,8 +1093,8 @@ export default function App() {
                 </div>
               )}
 
-              {/* Action buttons */}
-              <div className="space-y-2 pt-1">
+              {/* Action buttons — only when there is a URL or ongoing operation */}
+              {(template || phase !== 'idle' || statuses.length > 0) && <div className="space-y-2">
 
                 {/* ── Phase: done — save from memory (no re-download) ── */}
                 {phase === 'done' && ok > 0 && (
@@ -1185,10 +1187,13 @@ export default function App() {
                     </button>
                   )}
                 </div>
-              </div>
+              </div>}
+
+              {/* Divider */}
+              <div className="border-t" style={{ borderColor: 'var(--border)' }} />
 
               {/* Hint — always visible, detail behind tooltip */}
-              <div className="flex items-center gap-1.5 pt-1">
+              <div className="flex items-center gap-1.5">
                 <Tooltip content={
                   <div className="space-y-1.5">
                     <p><span className="font-medium" style={{ color: 'var(--text-1)' }}>Numbered series:</span> use <code className="px-1 py-0.5 rounded" style={{ background: 'var(--bg)' }}>photo[1–50].jpg</code></p>
@@ -1204,7 +1209,7 @@ export default function App() {
               </div>
 
               {/* Auto-save toggle */}
-              <div className="flex items-center justify-between pt-1">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <p className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Auto-save</p>
                   <Tooltip content="When on, the ZIP downloads automatically when all images finish. When off, you can preview first and save manually.">
