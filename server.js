@@ -20,6 +20,7 @@ const FULLSIZE_RE = /full(size|res)?|[\-_]large|[\-_]orig(inal)?|[\-_]hq|[\-_]hi
 const JUNK_URL_RE = /favicon|sprite|1x1|tracking|placeholder|blank|spacer|separator/i
 // Checked against just the filename (last path segment)
 const JUNK_FILENAME_RE = /logo|favicon|icon|sprite|banner|avatar|thumb-placeholder/i
+const ASSET_PATH_RE    = /\/webruntime\/|\/org-asset\/|\/_next\/static\/|\/node_modules\//i
 
 // Detects WordPress/CDN thumbnail dimension suffixes: image-800x600.jpg, image_300x200.png
 const WP_DIM_RE = /[-_](\d{2,4})[x×](\d{2,4})(?:-\w+)?\.(jpe?g|png|webp|gif)(\?.*)?$/i
@@ -75,6 +76,7 @@ function scoreUrl(url) {
   if (FULLSIZE_RE.test(url)) s += 10
   if (THUMB_RE.test(url)) s -= 15
   if (JUNK_URL_RE.test(url)) s -= 30
+  if (ASSET_PATH_RE.test(url)) s -= 25
   return s
 }
 
@@ -225,7 +227,7 @@ function extractAllImagesFromHtml(html, pageUrl) {
 
   const deduped = Array.from(byBase.values())
   deduped.sort((a, b) => b.score - a.score)
-  return deduped.map((i) => i.url)
+  return deduped  // {url: string, score: number}[]
 }
 
 // ─── Video detection ──────────────────────────────────────────────────────────
@@ -419,7 +421,7 @@ app.get('/api/scan', async (req, res) => {
 
     // URL itself is a direct image — return as single item
     if (isImage(contentType)) {
-      return res.json({ images: [url], count: 1, direct: true })
+      return res.json({ images: [{ url, score: 99 }], videos: [], count: 1, direct: true })
     }
 
     if (contentType.includes('text/html') || contentType.includes('application/xhtml')) {
