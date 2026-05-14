@@ -766,6 +766,13 @@ export default function App() {
     setPhase('scanning'); setScanError(null)
     try {
       const res  = await fetch(`/api/scan?url=${encodeURIComponent(urls[0])}`)
+      const contentType = res.headers.get('content-type') || ''
+      if (!contentType.includes('application/json')) {
+        setScanError('Scan API is unavailable on this deployment. Use the Vercel URL for full-page scans; GitHub Pages can only serve the static app.')
+        setPhase('idle')
+        return
+      }
+
       const data = await res.json()
       if (!res.ok || data.error) { setScanError(data.error || 'Scan failed'); setPhase('idle'); return }
       const hasImages = data.images?.length > 0
