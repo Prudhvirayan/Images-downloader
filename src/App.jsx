@@ -422,9 +422,11 @@ const PLATFORM_COLORS = { wistia: '#60a5fa', youtube: '#f87171', vimeo: '#a78bfa
 const CAN_DOWNLOAD    = new Set(['wistia', 'direct'])
 
 function VideoCard({ video }) {
-  const [resolving, setResolving] = useState(false)
-  const [resolved, setResolved]   = useState(video.directUrl ? video : null)
-  const [err, setErr]             = useState(null)
+  const [resolving, setResolving]   = useState(false)
+  const [resolved, setResolved]     = useState(video.directUrl ? video : null)
+  const [err, setErr]               = useState(null)
+  const [downloading, setDownloading] = useState(false)
+  const [dlProgress, setDlProgress]   = useState(null)
 
   const label = PLATFORM_LABELS[video.platform] || video.platform
   const color = PLATFORM_COLORS[video.platform] || 'var(--text-2)'
@@ -440,6 +442,35 @@ function VideoCard({ video }) {
       setResolved(data)
     } catch (e) { setErr(e.message) }
     finally { setResolving(false) }
+  }
+
+  async function handleDownload() {
+    if (!resolved?.directUrl || downloading) return
+    setDownloading(true); setDlProgress(null); setErr(null)
+    try {
+      const res = await fetch(resolved.directUrl)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const contentLength = res.headers.get('Content-Length')
+      const total = contentLength ? parseInt(contentLength, 10) : null
+      const reader = res.body.getReader()
+      const chunks = []
+      let received = 0
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        chunks.push(value)
+        received += value.length
+        if (total) setDlProgress(Math.round((received / total) * 100))
+      }
+      const blob = new Blob(chunks, { type: 'video/mp4' })
+      const objUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objUrl
+      a.download = `${resolved.title || video.title || 'video'}.mp4`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(objUrl), 10000)
+    } catch (e) { setErr(`Download failed: ${e.message}`) }
+    finally { setDownloading(false); setDlProgress(null) }
   }
 
   const title   = resolved?.title || video.title || null
@@ -473,13 +504,14 @@ function VideoCard({ video }) {
               style={{ borderColor: 'var(--border-2)', color: 'var(--text-2)' }}>
               Preview ↗
             </a>
-            {/* Download — routes via same-origin proxy so the download attribute works */}
-            <a href={`/api/proxy?url=${encodeURIComponent(resolved.directUrl)}`}
-              download={`${resolved.title || video.title || 'video'}.mp4`}
-              className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-white transition-opacity hover:opacity-90"
-              style={{ background: 'var(--violet)' }}>
-              <Ic.Download /> Download
-            </a>
+            {/* Download — fetches directly from CDN in-browser, saves as .mp4 */}
+            <button onClick={handleDownload} disabled={downloading}
+              className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{ background: 'var(--violet)', minWidth: '80px' }}>
+              {downloading
+                ? (dlProgress !== null ? `${dlProgress}%` : 'Downloading…')
+                : <><Ic.Download /> Download</>}
+            </button>
           </>
         ) : canDownload && video.wistiaHash ? (
           <button onClick={handleResolve} disabled={resolving}
@@ -677,6 +709,8 @@ export default function App() {
   const [phase, setPhase]           = useState('idle')
   const [scanError, setScanError]   = useState(null)
   const [scannedVideos, setScannedVideos] = useState([])
+  const [scannedImages, setScannedImages] = useState([])  // {url, score}[]
+  const [qualityOnly, setQualityOnly]     = useState(true)
   const [statuses, setStatuses]     = useState([])
   const [done, setDone]             = useState(0)
   const [zipPct, setZipPct]         = useState(null)
@@ -693,6 +727,7 @@ export default function App() {
     setScanError(null)
     setIsScanned(false)
     setScannedVideos([])
+    setScannedImages([])
     const { error, urls: parsed, single } = parseUrlTemplate(value)
     setParseError(error)
     setUrls(parsed)
@@ -720,19 +755,23 @@ export default function App() {
         setScanError("Nothing found in the page source. If you see a video in your browser, it may load via JavaScript — try pasting the Wistia media URL directly.")
         setPhase('idle'); return
       }
-      setUrls(data.images || []); setIsSingle(false); setIsScanned(true)
+      setScannedImages(data.images || [])
+      setUrls([]); setIsSingle(false); setIsScanned(true); setQualityOnly(true)
       setScannedVideos(data.videos || [])
     } catch (e) { setScanError(`Scan failed: ${e.message}`) }
     finally { setPhase('idle') }
   }, [urls, phase])
 
   const onDownload = useCallback(async () => {
-    if (!urls.length || phase === 'fetching' || phase === 'zipping') return
+    const targetUrls = isScanned
+      ? (qualityOnly ? scannedImages.filter(i => i.score > 0).map(i => i.url) : scannedImages.map(i => i.url))
+      : urls
+    if (!targetUrls.length || phase === 'fetching' || phase === 'zipping') return
     const ctrl = new AbortController(); abortRef.current = ctrl
     setPhase('fetching'); setStatuses([]); setDone(0); setZipPct(null); setLbIdx(null)
     objUrlsRef.current.forEach(u => URL.revokeObjectURL(u)); objUrlsRef.current = []
 
-    const results = await fetchWithPool(urls, {
+    const results = await fetchWithPool(targetUrls, {
       signal: ctrl.signal,
       onProgress: d => setDone(d),
       onResult: (i, result) => {
@@ -751,7 +790,7 @@ export default function App() {
       await buildAndDownloadZip(results, 'images.zip', setZipPct)
     }
     setPhase('done')
-  }, [urls, phase, autoSave])
+  }, [urls, scannedImages, qualityOnly, isScanned, phase, autoSave])
 
   // Re-ZIP images already in memory — no network call, instant
   const onSaveAgain = useCallback(async () => {
@@ -796,6 +835,7 @@ export default function App() {
     objUrlsRef.current.forEach(u => URL.revokeObjectURL(u)); objUrlsRef.current = []
     setTemplate(''); setUrls([]); setParseError(null); setScanError(null)
     setIsSingle(false); setIsScanned(false); setIsWistia(false); setIsWebPage(false); setScannedVideos([])
+    setScannedImages([]); setQualityOnly(true)
     setPhase('idle'); setStatuses([]); setDone(0); setZipPct(null); setLbIdx(null)
   }, [])
 
@@ -805,7 +845,13 @@ export default function App() {
   const fail     = statuses.filter(s => s && !s.ok).length
   const isBusy   = phase === 'fetching' || phase === 'zipping'
   const previews = statuses.filter(s => s?.ok && s.previewUrl)
-  const pct      = urls.length > 0 ? Math.round((done / urls.length) * 100) : 0
+
+  // Derived from scannedImages — used after a scan instead of template-driven urls
+  const qualityImages = scannedImages.filter(i => i.score > 0).map(i => i.url)
+  const allScanImages = scannedImages.map(i => i.url)
+  const displayUrls   = isScanned ? (qualityOnly ? qualityImages : allScanImages) : urls
+
+  const pct      = displayUrls.length > 0 ? Math.round((done / displayUrls.length) * 100) : 0
 
   const previewList = urls.length <= MAX_PREV + 1
     ? urls : [...urls.slice(0, MAX_PREV), null, urls[urls.length - 1]]
@@ -921,9 +967,33 @@ export default function App() {
 
                 {/* Mode chip */}
                 <div className="h-5 flex items-center">
-                  <ModeChip isSingle={isSingle} isScanned={isScanned} isWistia={isWistia} isWebPage={isWebPage} urls={urls} parseError={parseError} videoCount={scannedVideos.length} />
+                  <ModeChip isSingle={isSingle} isScanned={isScanned} isWistia={isWistia} isWebPage={isWebPage} urls={displayUrls} parseError={parseError} videoCount={scannedVideos.length} />
                 </div>
               </div>
+
+              {/* Image quality filter chips — only after a scan */}
+              {isScanned && scannedImages.length > 0 && (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <button onClick={() => setQualityOnly(true)}
+                    className="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all"
+                    style={{
+                      background: qualityOnly ? 'var(--violet)' : 'var(--bg)',
+                      color: qualityOnly ? 'white' : 'var(--text-2)',
+                      border: qualityOnly ? '1px solid transparent' : '1px solid var(--border)',
+                    }}>
+                    Quality ({qualityImages.length})
+                  </button>
+                  <button onClick={() => setQualityOnly(false)}
+                    className="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all"
+                    style={{
+                      background: !qualityOnly ? 'var(--violet)' : 'var(--bg)',
+                      color: !qualityOnly ? 'white' : 'var(--text-2)',
+                      border: !qualityOnly ? '1px solid transparent' : '1px solid var(--border)',
+                    }}>
+                    All ({allScanImages.length})
+                  </button>
+                </div>
+              )}
 
               {/* URL sequence preview */}
               {urls.length > 1 && !parseError && (
@@ -954,7 +1024,7 @@ export default function App() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs" style={{ color: 'var(--text-2)' }}>
-                      {phase === 'zipping' ? `Packaging ZIP…` : `Downloading ${done} of ${urls.length}`}
+                      {phase === 'zipping' ? `Packaging ZIP…` : `Downloading ${done} of ${displayUrls.length}`}
                     </span>
                     <span className="text-xs tabular-nums font-medium" style={{ color: 'var(--text-1)' }}>
                       {phase === 'zipping' ? `${zipPct ?? 0}%` : `${pct}%`}
@@ -1017,18 +1087,18 @@ export default function App() {
                   <button disabled
                     className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white opacity-80 cursor-not-allowed"
                     style={{ background: 'var(--violet)' }}>
-                    {phase === 'zipping' ? 'Packaging ZIP…' : `Downloading… ${done}/${urls.length}`}
+                    {phase === 'zipping' ? 'Packaging ZIP…' : `Downloading… ${done}/${displayUrls.length}`}
                   </button>
                 )}
 
                 {/* ── Phase: idle — sequence or scanned ── */}
-                {phase === 'idle' && (!isSingle || isScanned) && urls.length > 0 && !parseError && (
+                {phase === 'idle' && (!isSingle || isScanned) && displayUrls.length > 0 && !parseError && (
                   <button onClick={onDownload} disabled={phase === 'scanning'}
                     className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{ background: 'var(--violet)', boxShadow: '0 2px 8px rgba(124,58,237,0.25)' }}
                     onMouseEnter={e => e.currentTarget.style.opacity='0.9'}
                     onMouseLeave={e => e.currentTarget.style.opacity='1'}>
-                    <Ic.Download /> Download All ({urls.length.toLocaleString()})
+                    <Ic.Download /> Download All ({displayUrls.length.toLocaleString()})
                   </button>
                 )}
 

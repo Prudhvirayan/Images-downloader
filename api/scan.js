@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     const contentType = response.headers.get('content-type') || ''
 
     if (isImage(contentType)) {
-      return res.json({ images: [url], videos: [], count: 1, direct: true })
+      return res.json({ images: [{ url, score: 99 }], videos: [], count: 1, direct: true })
     }
 
     if (contentType.includes('text/html') || contentType.includes('application/xhtml')) {

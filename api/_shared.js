@@ -7,6 +7,7 @@ const THUMB_RE   = /thumb(nail)?|[\-_]sm[\-_]|[\-_]xs[\-_]|[\-_]icon|preview[\-_
 const FULLSIZE_RE = /full(size|res)?|[\-_]large|[\-_]orig(inal)?|[\-_]hq|[\-_]hires|[\-_]big|photo(?!s)/i
 const JUNK_URL_RE      = /favicon|sprite|1x1|tracking|placeholder|blank|spacer|separator/i
 const JUNK_FILENAME_RE = /logo|favicon|icon|sprite|banner|avatar|thumb-placeholder/i
+const ASSET_PATH_RE    = /\/webruntime\/|\/org-asset\/|\/_next\/static\/|\/node_modules\//i
 const WP_DIM_RE        = /[-_](\d{2,4})[x×](\d{2,4})(?:-\w+)?\.(jpe?g|png|webp|gif)(\?.*)?$/i
 const MIN_QUALITY_DIM  = 600
 const VIDEO_EXT_RE     = /\.(mp4|webm|mov|m4v)(\?[^"']*)?$/i
@@ -58,6 +59,7 @@ function scoreUrl(url) {
   if (FULLSIZE_RE.test(url)) s += 10
   if (THUMB_RE.test(url)) s -= 15
   if (JUNK_URL_RE.test(url)) s -= 30
+  if (ASSET_PATH_RE.test(url)) s -= 25
   return s
 }
 
@@ -179,7 +181,7 @@ export function extractAllImagesFromHtml(html, pageUrl) {
 
   const deduped = Array.from(byBase.values())
   deduped.sort((a, b) => b.score - a.score)
-  return deduped.map(i => i.url)
+  return deduped  // {url: string, score: number}[]
 }
 
 export function extractVideosFromHtml(html, pageUrl) {
