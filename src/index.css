@@ -15,6 +15,11 @@
     --violet-2:  #6D28D9;
     --violet-bg: #F5F0FF;
     --violet-border: #DDD6FE;
+    --shadow-card:         0 2px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.04);
+    --gradient-button:     linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
+    --gradient-btn-shadow: 0 2px 12px rgba(124,58,237,0.30), 0 1px 3px rgba(0,0,0,0.10);
+    --gradient-bg:         radial-gradient(ellipse 80% 50% at 50% 0%, rgba(124,58,237,0.04) 0%, var(--bg) 60%);
+    --gradient-text:       linear-gradient(135deg, var(--text-1) 0%, var(--violet) 110%);
   }
 
   .dark {
@@ -29,12 +34,48 @@
     --violet-2:  #8B5CF6;
     --violet-bg: #1A1525;
     --violet-border: #2D2040;
+    --shadow-card:         0 2px 12px rgba(0,0,0,0.22), 0 1px 3px rgba(0,0,0,0.14);
+    --gradient-button:     linear-gradient(135deg, #9B72F5 0%, #8B5CF6 100%);
+    --gradient-btn-shadow: 0 2px 12px rgba(155,114,245,0.28), 0 1px 3px rgba(0,0,0,0.20);
+    --gradient-bg:         radial-gradient(ellipse 80% 50% at 50% 0%, rgba(124,58,237,0.09) 0%, var(--bg) 60%);
+    --gradient-text:       linear-gradient(135deg, var(--text-1) 0%, var(--violet) 110%);
   }
 
   body {
-    background-color: var(--bg);
+    background: var(--gradient-bg);
+    background-attachment: fixed;
     color: var(--text-1);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
     transition: background-color 0.2s, color 0.2s;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+}
+
+@layer utilities {
+  .gradient-text {
+    background: var(--gradient-text);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .input-card:focus-within {
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.10), 0 8px 32px rgba(124,58,237,0.08) !important;
+    border-color: rgba(124,58,237,0.25) !important;
+  }
+
+  .dark .input-card:focus-within {
+    box-shadow: 0 0 0 3px rgba(155,114,245,0.13), 0 8px 32px rgba(155,114,245,0.10) !important;
+    border-color: rgba(155,114,245,0.25) !important;
+  }
+
+  .input-inner:focus-within {
+    border-color: rgba(124,58,237,0.35) !important;
+  }
+
+  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; }
+  .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background-color: var(--border-2); border-radius: 2px; }
 }
