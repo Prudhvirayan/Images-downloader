@@ -397,7 +397,7 @@ function ModeChip({ isSingle, isScanned, isWistia, isWebPage, urls, parseError, 
   if (isWistia) return (
     <div className="flex items-center gap-1.5">
       <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: '#60a5fa' }} />
-      <span className="text-xs font-medium" style={{ color: '#60a5fa' }}>Wistia video — resolves to direct MP4</span>
+      <span className="text-xs font-medium" style={{ color: '#60a5fa' }}>Wistia video</span>
     </div>
   )
 
@@ -507,7 +507,7 @@ function VideoCard({ video }) {
             {/* Download — fetches directly from CDN in-browser, saves as .mp4 */}
             <button onClick={handleDownload} disabled={downloading}
               className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
-              style={{ background: 'var(--violet)', minWidth: '80px' }}>
+              style={{ background: 'var(--gradient-button)', minWidth: '80px' }}>
               {downloading
                 ? (dlProgress !== null ? `${dlProgress}%` : 'Downloading…')
                 : <><Ic.Download /> Download</>}
@@ -676,6 +676,25 @@ function UrlPreviewList({ urls }) {
         </button>
       )}
     </div>
+  )
+}
+
+// ─── Tooltip ─────────────────────────────────────────────────────────────────
+function Tooltip({ content, children }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span className="relative inline-flex items-center">
+      <span onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}
+        onClick={() => setOpen(o => !o)} className="cursor-default">
+        {children}
+      </span>
+      {open && (
+        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 w-64 rounded-xl px-3 py-2.5 text-[11px] leading-relaxed pointer-events-none"
+          style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+          {content}
+        </div>
+      )}
+    </span>
   )
 }
 
@@ -857,13 +876,13 @@ export default function App() {
     ? urls : [...urls.slice(0, MAX_PREV), null, urls[urls.length - 1]]
 
   return (
-    <div className="min-h-screen transition-colors duration-200" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen transition-colors duration-200">
 
       {/* Dark mode toggle */}
       <button onClick={() => setDark(d => !d)}
-        className="fixed top-5 right-5 z-40 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all border"
+        className="fixed top-4 right-4 z-40 flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-all border"
         style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
-        {dark ? <><Ic.Sun />Light</> : <><Ic.Moon />Dark</>}
+        {dark ? <><Ic.Sun /><span className="hidden sm:inline">Light</span></> : <><Ic.Moon /><span className="hidden sm:inline">Dark</span></>}
       </button>
 
       {/* Lightbox */}
@@ -871,38 +890,38 @@ export default function App() {
         <Lightbox images={previews} startIndex={Math.min(lbIdx, previews.length - 1)} onClose={() => setLbIdx(null)} />
       )}
 
-      <div className="flex flex-col items-center px-4 pt-20 pb-16 min-h-screen">
-        <div className="w-full max-w-[480px]">
+      <div className="flex flex-col items-center px-3 sm:px-4 pt-20 pb-16 min-h-screen">
+        <div className="w-full max-w-[480px] md:max-w-[520px]">
 
           {/* ── Header ── */}
-          <header className="mb-10 text-center">
-            <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl mb-5"
-              style={{ background: 'var(--violet)', boxShadow: '0 8px 24px rgba(124,58,237,0.25)' }}>
-              <Ic.Photo cls="w-5 h-5 text-white" />
+          <header className="mb-8 text-center">
+            <div className="inline-flex flex-col items-center gap-[3px] mb-5" aria-hidden="true">
+              <span className="block w-5 h-[3px] rounded-full" style={{ background: 'var(--gradient-button)' }} />
+              <span className="block w-3.5 h-[3px] rounded-full opacity-60" style={{ background: 'var(--gradient-button)' }} />
+              <span className="block w-2 h-[3px] rounded-full opacity-30" style={{ background: 'var(--gradient-button)' }} />
             </div>
-            <h1 className="text-[28px] font-semibold tracking-tight leading-tight" style={{ color: 'var(--text-1)', letterSpacing: '-0.5px' }}>
+            <h1 className="text-[32px] font-semibold tracking-tight leading-tight gradient-text" style={{ letterSpacing: '-0.5px' }}>
               Image &amp; Video Downloader
             </h1>
             <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
-              Download images or videos — one file, a numbered series, or everything on a page.
+              Paste a URL to download images or videos — single file, numbered series, or full page scan.
             </p>
           </header>
 
           {/* ── Input card ── */}
-          <div className="rounded-2xl border overflow-hidden" style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)' }}>
+          <div className="rounded-2xl border overflow-hidden transition-shadow duration-200 input-card" style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
             <div className="p-5 space-y-4">
 
               {/* URL input */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>URL</label>
-                <div className="flex rounded-xl border overflow-hidden transition-all duration-150"
-                  style={{ borderColor: parseError ? '#f43f5e' : 'var(--border-2)', background: 'var(--bg)' }}
-                  onFocus={() => {}} >
+                <label className="block text-[10px] font-semibold uppercase" style={{ color: 'var(--text-3)', letterSpacing: '0.08em' }}>URL</label>
+                <div className="flex rounded-xl border overflow-hidden transition-all duration-150 input-inner"
+                  style={{ borderColor: parseError ? '#f43f5e' : 'var(--border-2)', background: 'var(--bg)' }}>
                   <input
                     type="text"
                     value={template}
                     onChange={e => onInput(e.target.value)}
-                    placeholder="Paste an image URL or gallery page address"
+                    placeholder="Paste image URL, video URL, or page URL…"
                     disabled={isBusy || phase === 'scanning'}
                     className="flex-1 px-3.5 py-2.5 text-sm bg-transparent outline-none min-w-0 disabled:opacity-50"
                     style={{ color: 'var(--text-1)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '13px' }}
@@ -975,20 +994,24 @@ export default function App() {
               {isScanned && scannedImages.length > 0 && (
                 <div className="flex items-center gap-1.5 mt-1">
                   <button onClick={() => setQualityOnly(true)}
-                    className="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all"
+                    className="px-2 rounded-full text-[11px] font-medium transition-all"
                     style={{
-                      background: qualityOnly ? 'var(--violet)' : 'var(--bg)',
+                      padding: '3px 8px',
+                      background: qualityOnly ? 'var(--gradient-button)' : 'var(--bg)',
                       color: qualityOnly ? 'white' : 'var(--text-2)',
                       border: qualityOnly ? '1px solid transparent' : '1px solid var(--border)',
+                      boxShadow: qualityOnly ? '0 1px 6px rgba(124,58,237,0.25)' : 'none',
                     }}>
                     Quality ({qualityImages.length})
                   </button>
                   <button onClick={() => setQualityOnly(false)}
-                    className="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all"
+                    className="px-2 rounded-full text-[11px] font-medium transition-all"
                     style={{
-                      background: !qualityOnly ? 'var(--violet)' : 'var(--bg)',
+                      padding: '3px 8px',
+                      background: !qualityOnly ? 'var(--gradient-button)' : 'var(--bg)',
                       color: !qualityOnly ? 'white' : 'var(--text-2)',
                       border: !qualityOnly ? '1px solid transparent' : '1px solid var(--border)',
+                      boxShadow: !qualityOnly ? '0 1px 6px rgba(124,58,237,0.25)' : 'none',
                     }}>
                     All ({allScanImages.length})
                   </button>
@@ -1075,9 +1098,9 @@ export default function App() {
                 {phase === 'done' && ok > 0 && (
                   <button onClick={onSaveAgain}
                     className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all"
-                    style={{ background: 'var(--violet)', boxShadow: '0 2px 8px rgba(124,58,237,0.25)' }}
-                    onMouseEnter={e => e.currentTarget.style.opacity='0.9'}
-                    onMouseLeave={e => e.currentTarget.style.opacity='1'}>
+                    style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
                     <Ic.Download /> Save as ZIP ({ok} image{ok !== 1 ? 's' : ''})
                   </button>
                 )}
@@ -1086,7 +1109,7 @@ export default function App() {
                 {isBusy && (
                   <button disabled
                     className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white opacity-80 cursor-not-allowed"
-                    style={{ background: 'var(--violet)' }}>
+                    style={{ background: 'var(--gradient-button)' }}>
                     {phase === 'zipping' ? 'Packaging ZIP…' : `Downloading… ${done}/${displayUrls.length}`}
                   </button>
                 )}
@@ -1095,9 +1118,9 @@ export default function App() {
                 {phase === 'idle' && (!isSingle || isScanned) && displayUrls.length > 0 && !parseError && (
                   <button onClick={onDownload} disabled={phase === 'scanning'}
                     className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ background: 'var(--violet)', boxShadow: '0 2px 8px rgba(124,58,237,0.25)' }}
-                    onMouseEnter={e => e.currentTarget.style.opacity='0.9'}
-                    onMouseLeave={e => e.currentTarget.style.opacity='1'}>
+                    style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
                     <Ic.Download /> Download All ({displayUrls.length.toLocaleString()})
                   </button>
                 )}
@@ -1109,10 +1132,10 @@ export default function App() {
                     <div className="space-y-2">
                       <button onClick={onScan}
                         className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all"
-                        style={{ background: 'var(--violet)', boxShadow: '0 2px 8px rgba(124,58,237,0.25)' }}
-                        onMouseEnter={e => e.currentTarget.style.opacity='0.9'}
-                        onMouseLeave={e => e.currentTarget.style.opacity='1'}>
-                        <Ic.Scan /> Scan for Images &amp; Videos
+                        style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
+                        onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
+                        onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
+                        <Ic.Scan /> Scan Page
                       </button>
                       <button onClick={onDownload}
                         className="w-full flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-all border"
@@ -1127,9 +1150,9 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-2">
                       <button onClick={onDownload}
                         className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold text-white transition-all"
-                        style={{ background: 'var(--violet)', boxShadow: '0 2px 8px rgba(124,58,237,0.2)' }}
-                        onMouseEnter={e => e.currentTarget.style.opacity='0.9'}
-                        onMouseLeave={e => e.currentTarget.style.opacity='1'}>
+                        style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
+                        onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
+                        onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
                         <Ic.Download /> {isWistia ? 'Resolve Video' : 'Download'}
                       </button>
                       <button onClick={onScan}
@@ -1164,20 +1187,29 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Hint — only when empty */}
-              {!template && (
-                <p className="text-[11px] leading-relaxed pt-1" style={{ color: 'var(--text-3)' }}>
-                  For a numbered series, use <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: 'var(--bg)', color: 'var(--text-2)' }}>photo[1-50].jpg</code> — typing <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: 'var(--bg)', color: 'var(--text-2)' }}>[</code> auto-adds the bracket. Paste any page URL and tap <strong style={{ color: 'var(--text-2)', fontWeight: 600 }}>Scan</strong> to find all images and videos. Paste a Wistia video URL to download it directly.
-                </p>
-              )}
+              {/* Hint — always visible, detail behind tooltip */}
+              <div className="flex items-center gap-1.5 pt-1">
+                <Tooltip content={
+                  <div className="space-y-1.5">
+                    <p><span className="font-medium" style={{ color: 'var(--text-1)' }}>Numbered series:</span> use <code className="px-1 py-0.5 rounded" style={{ background: 'var(--bg)' }}>photo[1–50].jpg</code></p>
+                    <p><span className="font-medium" style={{ color: 'var(--text-1)' }}>Full page scan:</span> paste a page URL and tap Scan</p>
+                    <p><span className="font-medium" style={{ color: 'var(--text-1)' }}>Wistia video:</span> paste a Wistia URL to download as MP4</p>
+                  </div>
+                }>
+                  <span className="inline-flex items-center gap-1 text-[11px] select-none" style={{ color: 'var(--text-3)' }}>
+                    <span className="text-[13px] leading-none">ⓘ</span>
+                    <span>Supports images, videos, numbered sequences, and full-page scans</span>
+                  </span>
+                </Tooltip>
+              </div>
 
               {/* Auto-save toggle */}
               <div className="flex items-center justify-between pt-1">
-                <div>
+                <div className="flex items-center gap-1.5">
                   <p className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Auto-save</p>
-                  <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>
-                    {autoSave ? 'ZIP saves automatically when finished' : "Preview first, save whenever you’re ready"}
-                  </p>
+                  <Tooltip content="When on, the ZIP downloads automatically when all images finish. When off, you can preview first and save manually.">
+                    <span className="text-[13px] leading-none select-none" style={{ color: 'var(--text-3)' }}>ⓘ</span>
+                  </Tooltip>
                 </div>
                 <button
                   onClick={() => setAutoSave(a => !a)}
@@ -1196,10 +1228,12 @@ export default function App() {
           {scannedVideos.length > 0 && (
             <div className="mt-3 rounded-2xl border overflow-hidden" style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
-                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
-                  Videos found ({scannedVideos.length})
+                <span className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>
+                  Videos <span style={{ color: 'var(--text-3)' }}>·</span> {scannedVideos.length}
                 </span>
-                <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>Wistia videos resolve to direct MP4</span>
+                <Tooltip content="Wistia videos resolve to a direct MP4 download. YouTube and Vimeo open for preview only.">
+                  <span className="text-[13px] leading-none select-none" style={{ color: 'var(--text-3)' }}>?</span>
+                </Tooltip>
               </div>
               {scannedVideos.map((v, i) => <VideoCard key={i} video={v} />)}
             </div>
@@ -1222,7 +1256,7 @@ export default function App() {
                   {fail > 0 && <span className="text-xs font-medium text-rose-500">{fail} failed</span>}
                 </div>
               </div>
-              <ul className="px-4 max-h-64 overflow-y-auto">
+              <ul className="px-4 max-h-64 overflow-y-auto scrollbar-thin">
                 {statuses.filter(Boolean).map((s, i) => {
                   const pi = previews.findIndex(p => p.previewUrl === s.previewUrl)
                   return <ResultItem key={i} status={s} onPreview={pi >= 0 ? () => setLbIdx(pi) : null} />
