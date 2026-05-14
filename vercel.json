@@ -1,9 +1,4 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "functions": {
-    "api/proxy.js":           { "maxDuration": 45 },
-    "api/scan.js":            { "maxDuration": 45 },
-    "api/resolve-wistia.js":  { "maxDuration": 15 }
-  }
+  "outputDirectory": "dist"
 }
