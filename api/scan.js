@@ -1,9 +1,30 @@
 import { BROWSER_HEADERS, httpErrorMessage, isImage, extractAllImagesFromHtml, extractVideosFromHtml, resolveWistiaVideo } from './shared.js'
 
-const GOOGLEBOT_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-  'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
-  'Accept-Language': 'en-US,en;q=0.9',
+const GOOGLEBOT_UA = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+
+async function googlebotFetch(url, referer) {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': GOOGLEBOT_UA, 'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8', 'Accept-Language': 'en-US,en;q=0.9', Referer: referer },
+      redirect: 'follow',
+    })
+    if (!res.ok) return null
+    return await res.text()
+  } catch (_e) {
+    return null
+  }
+}
+
+async function resolveVideos(rawVideos) {
+  return Promise.all(
+    rawVideos.map(async (v) => {
+      if (v.platform === 'wistia' && v.wistiaHash) {
+        const resolved = await resolveWistiaVideo(v.wistiaHash)
+        return resolved ? { ...v, ...resolved } : v
+      }
+      return v
+    })
+  )
 }
 
 export default async function handler(req, res) {
@@ -11,7 +32,7 @@ export default async function handler(req, res) {
   if (!url) return res.status(400).json({ error: 'Missing url' })
 
   let parsed
-  try { parsed = new URL(url) } catch { return res.status(400).json({ error: 'Invalid URL' }) }
+  try { parsed = new URL(url) } catch (_e) { return res.status(400).json({ error: 'Invalid URL' }) }
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     return res.status(400).json({ error: 'Only HTTP/HTTPS URLs allowed' })
   }
@@ -30,37 +51,29 @@ export default async function handler(req, res) {
     }
 
     if (contentType.includes('text/html') || contentType.includes('application/xhtml')) {
-      let html = await response.text()
-      let images   = extractAllImagesFromHtml(html, url)
-      let rawVideos = extractVideosFromHtml(html, url)
+      const html = await response.text()
+      const browserImages = extractAllImagesFromHtml(html, url)
+      const browserVideos = extractVideosFromHtml(html, url)
 
-      // Always retry with Googlebot when no videos found — SPAs return browser images
-      // (static assets) but hide video embeds; Googlebot triggers SSR that exposes them.
-      if (rawVideos.length === 0) {
-        try {
-          const gbRes = await fetch(url, { headers: { ...GOOGLEBOT_HEADERS, Referer: referer }, redirect: 'follow' })
-          if (gbRes.ok) {
-            const gbHtml   = await gbRes.text()
-            const gbVideos = extractVideosFromHtml(gbHtml, url)
-            if (gbVideos.length > 0) {
-              rawVideos = gbVideos
-              if (images.length === 0) images = extractAllImagesFromHtml(gbHtml, url)
-            }
+      // Retry with Googlebot UA when no videos — SPAs hide video embeds from browsers
+      let images = browserImages
+      let rawVideos = browserVideos
+
+      if (browserVideos.length === 0) {
+        const gbHtml = await googlebotFetch(url, referer)
+        if (gbHtml !== null) {
+          const gbVideos = extractVideosFromHtml(gbHtml, url)
+          if (gbVideos.length > 0) {
+            rawVideos = gbVideos
+            images = browserImages.length === 0 ? extractAllImagesFromHtml(gbHtml, url) : browserImages
           }
-        } catch {}
+        }
       }
 
-      const videos = await Promise.all(
-        rawVideos.map(async v => {
-          if (v.platform === 'wistia' && v.wistiaHash) {
-            const resolved = await resolveWistiaVideo(v.wistiaHash)
-            return resolved ? { ...v, ...resolved } : v
-          }
-          return v
-        })
-      )
+      const videos = await resolveVideos(rawVideos)
+      const publishedVideos = videos.filter((v) => v.platform !== 'wistia' || v.directUrl || v.embedUrl)
 
-      return res.json({ images, videos: videos.filter(v => v.platform !== 'wistia' || v.directUrl || v.embedUrl), count: images.length })
+      return res.json({ images, videos: publishedVideos, count: images.length })
     }
 
     return res.status(415).json({ error: `Cannot scan content-type: ${contentType}` })
