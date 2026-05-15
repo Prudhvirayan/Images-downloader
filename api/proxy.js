@@ -1,4 +1,4 @@
-import { fetchImageFromUrl } from './_shared.js'
+import { fetchImageFromUrl } from './shared.js'
 
 export default async function handler(req, res) {
   const { url } = req.query
