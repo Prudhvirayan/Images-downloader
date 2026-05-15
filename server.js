@@ -70,6 +70,40 @@ function resolveUrl(src, base) {
   try { return new URL(src, base).href } catch { return null }
 }
 
+function unwrapCdnSrc(raw) {
+  if (!raw || raw.startsWith('data:')) return raw
+  try {
+    if (raw.includes('/_next/image')) {
+      const u = new URL(raw, 'https://x.com')
+      const original = u.searchParams.get('url')
+      if (original) return decodeURIComponent(original)
+    }
+  } catch {}
+  return raw
+}
+
+function deoptimizeUrl(url) {
+  try {
+    const u = new URL(url)
+    if (u.hostname.includes('cloudinary.com') && u.pathname.includes('/image/upload/')) {
+      u.pathname = u.pathname.replace(
+        /(\/image\/upload\/)([a-z_,.\d]+\/)(.*)/,
+        (_, prefix, _transforms, rest) => prefix + rest
+      )
+      return u.href
+    }
+    u.pathname = u.pathname.replace(/_(\d+)x(\d+)(\.[a-z]+)$/i, '$3')
+    if (u.searchParams.has('format') && /^\d+w$/i.test(u.searchParams.get('format') || '')) {
+      u.searchParams.set('format', '2500w')
+      return u.href
+    }
+    for (const key of ['w', 'h', 'width', 'height', 'fit', 'crop', 'resize', 'size', 'maxwidth', 'maxheight', 'imwidth', 'imheight']) {
+      u.searchParams.delete(key)
+    }
+    return u.href
+  } catch { return url }
+}
+
 function scoreUrl(url) {
   let s = 0
   if (IMAGE_EXT_RE.test(url)) s += 5
@@ -162,7 +196,7 @@ function extractAllImagesFromHtml(html, pageUrl) {
   const images = []
 
   function addCandidate(raw, w = 0, h = 0) {
-    const url = resolveUrl(raw, pageUrl)
+    const url = resolveUrl(deoptimizeUrl(resolveUrl(raw, pageUrl) || raw), pageUrl)
     if (!url || seen.has(url)) return
     if (JUNK_URL_RE.test(url)) return
     const filename = url.split('/').pop().split('?')[0]
@@ -192,8 +226,10 @@ function extractAllImagesFromHtml(html, pageUrl) {
     const h = parseInt($el.attr('height') || '0', 10)
 
     for (const attr of ['src', 'data-src', 'data-lazy', 'data-original', 'data-full', 'data-image']) {
-      const raw = $el.attr(attr)
-      if (raw && IMAGE_EXT_RE.test(raw)) { addCandidate(raw, w, h); break }
+      let raw = $el.attr(attr)
+      if (!raw) continue
+      raw = unwrapCdnSrc(raw)
+      if (IMAGE_EXT_RE.test(raw)) { addCandidate(raw, w, h); break }
     }
 
     const srcset = $el.attr('srcset') || $el.attr('data-srcset') || ''
@@ -204,7 +240,10 @@ function extractAllImagesFromHtml(html, pageUrl) {
         const dw = descriptor ? parseFloat(descriptor) : 0
         if (dw > bestW) { bestW = dw; bestSrc = rawUrl }
       }
-      if (bestSrc && IMAGE_EXT_RE.test(bestSrc)) addCandidate(bestSrc, w, h)
+      if (bestSrc) {
+        const unwrapped = unwrapCdnSrc(bestSrc)
+        if (IMAGE_EXT_RE.test(unwrapped)) addCandidate(unwrapped, w, h)
+      }
     }
   })
 

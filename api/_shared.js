@@ -53,6 +53,57 @@ function resolveUrl(src, base) {
   try { return new URL(src, base).href } catch { return null }
 }
 
+// Extracts the original URL from CDN/optimizer wrappers before the extension check.
+// Handles: Next.js Image API, Contentful Image API
+function unwrapCdnSrc(raw) {
+  if (!raw || raw.startsWith('data:')) return raw
+  try {
+    // Next.js Image Optimization: /_next/image?url=ENCODED_ORIGINAL&w=...
+    if (raw.includes('/_next/image')) {
+      const u = new URL(raw, 'https://x.com')
+      const original = u.searchParams.get('url')
+      if (original) return decodeURIComponent(original)
+    }
+    // Contentful Image API: //images.ctfassets.net/...?w=800
+    // Just return as-is; deoptimizeUrl will strip the size params
+  } catch {}
+  return raw
+}
+
+// Strips CDN resize/transform parameters to recover the highest-quality source.
+function deoptimizeUrl(url) {
+  try {
+    const u = new URL(url)
+
+    // Cloudinary: /image/upload/w_800,q_auto,c_fill/v123/photo.jpg
+    // → strip the transformation segment after /upload/
+    if (u.hostname.includes('cloudinary.com') && u.pathname.includes('/image/upload/')) {
+      u.pathname = u.pathname.replace(
+        /(\/image\/upload\/)([a-z_,.\d]+\/)(.*)/,
+        (_, prefix, _transforms, rest) => prefix + rest
+      )
+      return u.href
+    }
+
+    // Shopify CDN: product_image_300x200.jpg → product_image.jpg
+    u.pathname = u.pathname.replace(/_(\d+)x(\d+)(\.[a-z]+)$/i, '$3')
+
+    // Squarespace: ?format=750w → max size
+    if (u.searchParams.has('format') && /^\d+w$/i.test(u.searchParams.get('format') || '')) {
+      u.searchParams.set('format', '2500w')
+      return u.href
+    }
+
+    // Strip common CDN resize query params (Imgix, Contentful, generic)
+    for (const key of ['w', 'h', 'width', 'height', 'fit', 'crop', 'resize', 'size', 'maxwidth', 'maxheight', 'imwidth', 'imheight']) {
+      u.searchParams.delete(key)
+    }
+    // Keep quality/format params if present so the CDN still serves the image type correctly
+
+    return u.href
+  } catch { return url }
+}
+
 function scoreUrl(url) {
   let s = 0
   if (IMAGE_EXT_RE.test(url)) s += 5
@@ -126,7 +177,7 @@ export function extractAllImagesFromHtml(html, pageUrl) {
   const images = []
 
   function addCandidate(raw, w = 0, h = 0) {
-    const url = resolveUrl(raw, pageUrl)
+    const url = resolveUrl(deoptimizeUrl(resolveUrl(raw, pageUrl) || raw), pageUrl)
     if (!url || seen.has(url)) return
     if (JUNK_URL_RE.test(url)) return
     const filename = url.split('/').pop().split('?')[0]
@@ -151,8 +202,10 @@ export function extractAllImagesFromHtml(html, pageUrl) {
     const w = parseInt($el.attr('width') || '0', 10)
     const h = parseInt($el.attr('height') || '0', 10)
     for (const attr of ['src', 'data-src', 'data-lazy', 'data-original', 'data-full', 'data-image']) {
-      const raw = $el.attr(attr)
-      if (raw && IMAGE_EXT_RE.test(raw)) { addCandidate(raw, w, h); break }
+      let raw = $el.attr(attr)
+      if (!raw) continue
+      raw = unwrapCdnSrc(raw)  // resolve /_next/image wrappers before extension check
+      if (IMAGE_EXT_RE.test(raw)) { addCandidate(raw, w, h); break }
     }
     const srcset = $el.attr('srcset') || $el.attr('data-srcset') || ''
     if (srcset) {
@@ -162,7 +215,10 @@ export function extractAllImagesFromHtml(html, pageUrl) {
         const dw = descriptor ? parseFloat(descriptor) : 0
         if (dw > bestW) { bestW = dw; bestSrc = rawUrl }
       }
-      if (bestSrc && IMAGE_EXT_RE.test(bestSrc)) addCandidate(bestSrc, w, h)
+      if (bestSrc) {
+        const unwrapped = unwrapCdnSrc(bestSrc)
+        if (IMAGE_EXT_RE.test(unwrapped)) addCandidate(unwrapped, w, h)
+      }
     }
   })
 
