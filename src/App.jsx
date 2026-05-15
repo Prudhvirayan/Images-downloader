@@ -729,7 +729,7 @@ export default function App() {
   const [scanError, setScanError]   = useState(null)
   const [scannedVideos, setScannedVideos] = useState([])
   const [scannedImages, setScannedImages] = useState([])  // {url, score}[]
-  const [qualityOnly, setQualityOnly]     = useState(true)
+  const [activeTab, setActiveTab]         = useState('quality') // 'videos'|'quality'|'other'
   const [statuses, setStatuses]     = useState([])
   const [done, setDone]             = useState(0)
   const [zipPct, setZipPct]         = useState(null)
@@ -747,6 +747,7 @@ export default function App() {
     setIsScanned(false)
     setScannedVideos([])
     setScannedImages([])
+    setActiveTab('quality')
     const { error, urls: parsed, single } = parseUrlTemplate(value)
     setParseError(error)
     setUrls(parsed)
@@ -781,9 +782,15 @@ export default function App() {
         setScanError("Nothing found in the page source. If you see a video in your browser, it may load via JavaScript — try pasting the Wistia media URL directly.")
         setPhase('idle'); return
       }
-      setScannedImages(data.images || [])
-      setUrls([]); setIsSingle(false); setIsScanned(true); setQualityOnly(true)
-      setScannedVideos(data.videos || [])
+      const imgs = data.images || []
+      const vids = data.videos || []
+      setScannedImages(imgs)
+      setScannedVideos(vids)
+      setUrls([]); setIsSingle(false); setIsScanned(true)
+      // default tab: videos if any, else quality if any, else other
+      const hasVids = vids.length > 0
+      const hasQual = imgs.some(i => i.score > 0)
+      setActiveTab(hasVids ? 'videos' : hasQual ? 'quality' : 'other')
     } catch (e) {
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
       setScanError(isLocal
@@ -795,7 +802,9 @@ export default function App() {
 
   const onDownload = useCallback(async () => {
     const targetUrls = isScanned
-      ? (qualityOnly ? scannedImages.filter(i => i.score > 0).map(i => i.url) : scannedImages.map(i => i.url))
+      ? (activeTab === 'quality' ? scannedImages.filter(i => i.score > 0).map(i => i.url)
+         : activeTab === 'other'  ? scannedImages.filter(i => i.score <= 0).map(i => i.url)
+         : scannedImages.map(i => i.url))
       : urls
     if (!targetUrls.length || phase === 'fetching' || phase === 'zipping') return
     const ctrl = new AbortController(); abortRef.current = ctrl
@@ -821,7 +830,7 @@ export default function App() {
       await buildAndDownloadZip(results, 'images.zip', setZipPct)
     }
     setPhase('done')
-  }, [urls, scannedImages, qualityOnly, isScanned, phase, autoSave])
+  }, [urls, scannedImages, activeTab, isScanned, phase, autoSave])
 
   // Re-ZIP images already in memory — no network call, instant
   const onSaveAgain = useCallback(async () => {
@@ -866,7 +875,7 @@ export default function App() {
     objUrlsRef.current.forEach(u => URL.revokeObjectURL(u)); objUrlsRef.current = []
     setTemplate(''); setUrls([]); setParseError(null); setScanError(null)
     setIsSingle(false); setIsScanned(false); setIsWistia(false); setIsWebPage(false); setScannedVideos([])
-    setScannedImages([]); setQualityOnly(true)
+    setScannedImages([]); setActiveTab('quality')
     setPhase('idle'); setStatuses([]); setDone(0); setZipPct(null); setLbIdx(null)
   }, [])
 
@@ -879,8 +888,11 @@ export default function App() {
 
   // Derived from scannedImages — used after a scan instead of template-driven urls
   const qualityImages = scannedImages.filter(i => i.score > 0).map(i => i.url)
+  const otherImages   = scannedImages.filter(i => i.score <= 0).map(i => i.url)
   const allScanImages = scannedImages.map(i => i.url)
-  const displayUrls   = isScanned ? (qualityOnly ? qualityImages : allScanImages) : urls
+  const displayUrls   = isScanned
+    ? (activeTab === 'quality' ? qualityImages : activeTab === 'other' ? otherImages : allScanImages)
+    : urls
 
   const pct      = displayUrls.length > 0 ? Math.round((done / displayUrls.length) * 100) : 0
 
@@ -999,41 +1011,50 @@ export default function App() {
                 {/* Mode chip — only renders when there's URL content */}
                 {template && (
                   <div className="flex items-center">
-                    <ModeChip isSingle={isSingle} isScanned={isScanned} isWistia={isWistia} isWebPage={isWebPage} urls={displayUrls} parseError={parseError} videoCount={scannedVideos.length} />
+                    <ModeChip isSingle={isSingle} isScanned={isScanned} isWistia={isWistia} isWebPage={isWebPage} urls={isScanned ? allScanImages : displayUrls} parseError={parseError} videoCount={scannedVideos.length} />
                   </div>
                 )}
               </div>
 
-              {/* Image quality filter chips — only after a scan */}
-              {isScanned && scannedImages.length > 0 && (
-                <div className="flex items-center gap-1.5 mt-1">
-                  <button onClick={() => setQualityOnly(true)}
-                    className="px-2 rounded-full text-[11px] font-medium transition-all"
-                    style={{
-                      padding: '3px 8px',
-                      background: qualityOnly ? 'var(--gradient-button)' : 'var(--bg)',
-                      color: qualityOnly ? 'white' : 'var(--text-2)',
-                      border: qualityOnly ? '1px solid transparent' : '1px solid var(--border)',
-                      boxShadow: qualityOnly ? '0 1px 6px rgba(124,58,237,0.25)' : 'none',
-                    }}>
-                    Quality ({qualityImages.length})
-                  </button>
-                  <button onClick={() => setQualityOnly(false)}
-                    className="px-2 rounded-full text-[11px] font-medium transition-all"
-                    style={{
-                      padding: '3px 8px',
-                      background: !qualityOnly ? 'var(--gradient-button)' : 'var(--bg)',
-                      color: !qualityOnly ? 'white' : 'var(--text-2)',
-                      border: !qualityOnly ? '1px solid transparent' : '1px solid var(--border)',
-                      boxShadow: !qualityOnly ? '0 1px 6px rgba(124,58,237,0.25)' : 'none',
-                    }}>
-                    All ({allScanImages.length})
-                  </button>
+              {/* Scan result tabs: Videos / Quality / Other */}
+              {isScanned && (scannedImages.length > 0 || scannedVideos.length > 0) && (() => {
+                const chipStyle = (tab) => ({
+                  padding: '3px 10px',
+                  background: activeTab === tab ? 'var(--gradient-button)' : 'var(--bg)',
+                  color: activeTab === tab ? 'white' : 'var(--text-2)',
+                  border: activeTab === tab ? '1px solid transparent' : '1px solid var(--border)',
+                  boxShadow: activeTab === tab ? '0 1px 6px rgba(124,58,237,0.25)' : 'none',
+                })
+                return (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {scannedVideos.length > 0 && (
+                      <button onClick={() => setActiveTab('videos')} className="rounded-full text-[11px] font-medium transition-all" style={chipStyle('videos')}>
+                        Videos ({scannedVideos.length})
+                      </button>
+                    )}
+                    {qualityImages.length > 0 && (
+                      <button onClick={() => setActiveTab('quality')} className="rounded-full text-[11px] font-medium transition-all" style={chipStyle('quality')}>
+                        Quality ({qualityImages.length})
+                      </button>
+                    )}
+                    {otherImages.length > 0 && (
+                      <button onClick={() => setActiveTab('other')} className="rounded-full text-[11px] font-medium transition-all" style={chipStyle('other')}>
+                        Other images ({otherImages.length})
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* Videos tab content — inline in main card */}
+              {isScanned && activeTab === 'videos' && scannedVideos.length > 0 && (
+                <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'var(--border)' }}>
+                  {scannedVideos.map((v, i) => <VideoCard key={i} video={v} />)}
                 </div>
               )}
 
-              {/* URL / scan result preview */}
-              {((isScanned && displayUrls.length > 0) || (urls.length > 1 && !isScanned)) && !parseError && (
+              {/* URL / scan result preview — images tabs only */}
+              {((isScanned && activeTab !== 'videos' && displayUrls.length > 0) || (urls.length > 1 && !isScanned)) && !parseError && (
                 <UrlPreviewList urls={isScanned ? displayUrls : urls} />
               )}
 
@@ -1128,14 +1149,14 @@ export default function App() {
                   </button>
                 )}
 
-                {/* ── Phase: idle — sequence or scanned ── */}
-                {phase === 'idle' && (!isSingle || isScanned) && displayUrls.length > 0 && !parseError && (
+                {/* ── Phase: idle — sequence or scanned (not videos tab) ── */}
+                {phase === 'idle' && (!isSingle || isScanned) && displayUrls.length > 0 && !parseError && activeTab !== 'videos' && (
                   <button onClick={onDownload} disabled={phase === 'scanning'}
                     className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
                     onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
                     onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
-                    <Ic.Download /> Download All ({displayUrls.length.toLocaleString()})
+                    <Ic.Download /> Download Images ({displayUrls.length.toLocaleString()})
                   </button>
                 )}
 
@@ -1241,20 +1262,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* ── Videos found via scan ── */}
-          {scannedVideos.length > 0 && (
-            <div className="mt-3 rounded-2xl border overflow-hidden" style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-              <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
-                <span className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>
-                  Videos <span style={{ color: 'var(--text-3)' }}>·</span> {scannedVideos.length}
-                </span>
-                <Tooltip content="Wistia videos resolve to a direct MP4 download. YouTube and Vimeo open for preview only.">
-                  <span className="text-[13px] leading-none select-none" style={{ color: 'var(--text-3)' }}>?</span>
-                </Tooltip>
-              </div>
-              {scannedVideos.map((v, i) => <VideoCard key={i} video={v} />)}
-            </div>
-          )}
+          {/* Videos are now shown inline inside the main card as a tab */}
 
           {/* ── Results ── */}
           {statuses.filter(Boolean).length > 0 && (
