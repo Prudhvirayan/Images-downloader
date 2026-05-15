@@ -278,6 +278,7 @@ function extractVideosFromHtml(html, pageUrl) {
 
   // 1. <video> tags
   $('video').each((_, el) => {
+
     const $el = $(el)
     const src = resolveUrl($el.attr('src'), pageUrl)
     if (src && !seen.has(src)) { seen.add(src); videos.push({ platform: 'direct', url: src, directUrl: src }) }
