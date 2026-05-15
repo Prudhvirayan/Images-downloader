@@ -766,7 +766,7 @@ export default function App() {
     if (!urls[0] || phase !== 'idle') return
     setPhase('scanning'); setScanError(null)
     try {
-      const res  = await fetch(`/api/scan?url=${encodeURIComponent(urls[0])}`)
+      const res  = await fetch(`/api/proxy?mode=scan&url=${encodeURIComponent(urls[0])}`)
       const contentType = res.headers.get('content-type') || ''
       if (!contentType.includes('application/json')) {
         setScanError('Scan API is unavailable on this deployment. Redeploy on Vercel with the /api functions, or run npm run dev locally so the API server starts.')

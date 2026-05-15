@@ -422,6 +422,11 @@ async function fetchImageFromUrl(targetUrl) {
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 app.get('/api/proxy', async (req, res) => {
+  // mode=scan: local dev forwards to /api/scan (Vercel uses inline handler in proxy.js)
+  if (req.query.mode === 'scan') {
+    const scanUrl = req.query.url ? `/api/scan?url=${encodeURIComponent(req.query.url)}` : '/api/scan'
+    return res.redirect(302, scanUrl)
+  }
   const { url } = req.query
   if (!url) return res.status(400).send('Missing url parameter')
 
