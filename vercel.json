@@ -1,9 +1,8 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
-  ]
+  "functions": {
+    "api/proxy.js": { "maxDuration": 45 },
+    "api/scan.js":  { "maxDuration": 45 }
+  }
 }
