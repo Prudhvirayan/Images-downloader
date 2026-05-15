@@ -1032,9 +1032,9 @@ export default function App() {
                 </div>
               )}
 
-              {/* URL sequence preview */}
-              {urls.length > 1 && !parseError && (
-                <UrlPreviewList urls={urls} />
+              {/* URL / scan result preview */}
+              {((isScanned && displayUrls.length > 0) || (urls.length > 1 && !isScanned)) && !parseError && (
+                <UrlPreviewList urls={isScanned ? displayUrls : urls} />
               )}
 
               {/* Errors */}
