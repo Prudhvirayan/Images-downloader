@@ -1,4 +1,4 @@
-import { BROWSER_HEADERS, httpErrorMessage, isImage, extractAllImagesFromHtml, extractVideosFromHtml, resolveWistiaVideo } from './_shared.js'
+import { BROWSER_HEADERS, httpErrorMessage, isImage, extractAllImagesFromHtml, extractVideosFromHtml, resolveWistiaVideo } from './shared.js'
 
 const GOOGLEBOT_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',

@@ -1,4 +1,4 @@
-import { resolveWistiaVideo } from './_shared.js'
+import { resolveWistiaVideo } from './shared.js'
 
 export default async function handler(req, res) {
   const { hash } = req.query
