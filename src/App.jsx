@@ -1034,12 +1034,12 @@ export default function App() {
                     )}
                     {qualityImages.length > 0 && (
                       <button onClick={() => setActiveTab('quality')} className="rounded-full text-[11px] font-medium transition-all" style={chipStyle('quality')}>
-                        Quality ({qualityImages.length})
+                        Photos ({qualityImages.length})
                       </button>
                     )}
                     {otherImages.length > 0 && (
                       <button onClick={() => setActiveTab('other')} className="rounded-full text-[11px] font-medium transition-all" style={chipStyle('other')}>
-                        Other images ({otherImages.length})
+                        Site assets ({otherImages.length})
                       </button>
                     )}
                   </div>
@@ -1156,7 +1156,7 @@ export default function App() {
                     style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
                     onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
                     onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
-                    <Ic.Download /> Download Images ({displayUrls.length.toLocaleString()})
+                    <Ic.Download /> Download {activeTab === 'other' ? 'Assets' : 'Photos'} ({displayUrls.length.toLocaleString()})
                   </button>
                 )}
 
