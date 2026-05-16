@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo, createContext, useCo
 import { parseUrlTemplate, getFilenameFromUrl } from './utils/urlParser'
 import { fetchWithPool, buildAndDownloadZip } from './utils/fetcher'
 import { LANGUAGES, makeT } from './i18n/index.js'
+import { useForm } from '@formspree/react'
 
 const T = createContext(null)
 const useT = () => useContext(T)
@@ -778,28 +779,7 @@ function LegalDisclaimer() {
 // ─── Language Request Modal ───────────────────────────────────────────────────
 function LanguageRequestModal({ onClose }) {
   const t = useT()
-  const [value, setValue] = useState('')
-  const [sent, setSent] = useState(false)
-  const [sending, setSending] = useState(false)
-  const formspreeId = import.meta.env.VITE_FORMSPREE_ID
-
-  async function submit(e) {
-    e.preventDefault()
-    if (!value.trim()) return
-    setSending(true)
-    try {
-      if (formspreeId) {
-        await fetch(`https://formspree.io/f/${formspreeId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ language: value, _subject: 'Language Request — Image & Video Downloader' }),
-        })
-      }
-      setSent(true)
-    } catch (_e) {
-      setSent(true)
-    } finally { setSending(false) }
-  }
+  const [state, handleSubmit] = useForm('xykvgyrw')
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center px-4"
@@ -808,7 +788,7 @@ function LanguageRequestModal({ onClose }) {
       <div className="rounded-2xl border shadow-2xl p-6 w-full max-w-sm"
         style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
         onClick={e => e.stopPropagation()}>
-        {sent ? (
+        {state.succeeded ? (
           <div className="text-center space-y-4">
             <p className="text-2xl">🙏</p>
             <p className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>{t('lang_request_thanks')}</p>
@@ -818,22 +798,27 @@ function LanguageRequestModal({ onClose }) {
             </button>
           </div>
         ) : (
-          <form onSubmit={submit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('lang_request_title')}</p>
-            <input type="text" value={value} onChange={e => setValue(e.target.value)}
-              placeholder={t('lang_request_ph')} autoFocus
+            <input
+              type="text"
+              name="language"
+              required
+              placeholder={t('lang_request_ph')}
+              autoFocus
               className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none border"
               style={{ background: 'var(--bg)', borderColor: 'var(--border-2)', color: 'var(--text-1)' }} />
+            <input type="hidden" name="_subject" value="Language Request — Image & Video Downloader" />
             <div className="flex gap-2">
               <button type="button" onClick={onClose}
                 className="flex-1 rounded-xl py-2.5 text-sm font-medium border transition-colors"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-2)', background: 'transparent' }}>
                 {t('lang_request_close')}
               </button>
-              <button type="submit" disabled={!value.trim() || sending}
+              <button type="submit" disabled={state.submitting}
                 className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50"
                 style={{ background: 'var(--gradient-button)' }}>
-                {sending ? t('lang_request_sending') : t('lang_request_submit')}
+                {state.submitting ? t('lang_request_sending') : t('lang_request_submit')}
               </button>
             </div>
           </form>
