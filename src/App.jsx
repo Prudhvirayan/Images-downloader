@@ -1,6 +1,10 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo, createContext, useContext } from 'react'
 import { parseUrlTemplate, getFilenameFromUrl } from './utils/urlParser'
 import { fetchWithPool, buildAndDownloadZip } from './utils/fetcher'
+import { LANGUAGES, makeT } from './i18n/index.js'
+
+const T = createContext(null)
+const useT = () => useContext(T)
 
 // ─── Design tokens (used via var(--*) in CSS, see index.css) ─────────────────
 // Light: --bg #F5F4F0  --surface #FFF  --border #E3E2DC  --text-1 #1A1917 etc.
@@ -369,6 +373,7 @@ function Lightbox({ images, startIndex, onClose }) {
 
 // ─── Mode Chip ────────────────────────────────────────────────────────────────
 function ModeChip({ isSingle, isScanned, isWistia, isWebPage, urls, parseError, videoCount = 0 }) {
+  const t = useT()
   if (!urls.length || parseError) return null
 
   if (isScanned) {
@@ -379,7 +384,7 @@ function ModeChip({ isSingle, isScanned, isWistia, isWebPage, urls, parseError, 
       <div className="flex items-center gap-1.5">
         <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
         <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-          Found {summary} on this page
+          {t('mode_found', { summary })}
         </span>
       </div>
     )
@@ -389,7 +394,7 @@ function ModeChip({ isSingle, isScanned, isWistia, isWebPage, urls, parseError, 
     <div className="flex items-center gap-1.5">
       <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: 'var(--violet)' }} />
       <span className="text-xs font-medium" style={{ color: 'var(--violet)' }}>
-        Sequence &middot; {urls.length.toLocaleString()} images
+        {t('mode_sequence', { n: urls.length.toLocaleString() })}
       </span>
     </div>
   )
@@ -397,21 +402,21 @@ function ModeChip({ isSingle, isScanned, isWistia, isWebPage, urls, parseError, 
   if (isWistia) return (
     <div className="flex items-center gap-1.5">
       <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: '#60a5fa' }} />
-      <span className="text-xs font-medium" style={{ color: '#60a5fa' }}>Wistia video</span>
+      <span className="text-xs font-medium" style={{ color: '#60a5fa' }}>{t('mode_wistia')}</span>
     </div>
   )
 
   if (isWebPage) return (
     <div className="flex items-center gap-1.5">
       <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: '#f59e0b' }} />
-      <span className="text-xs font-medium" style={{ color: '#d97706' }}>Web page — use Scan to find images &amp; videos</span>
+      <span className="text-xs font-medium" style={{ color: '#d97706' }}>{t('mode_webpage')}</span>
     </div>
   )
 
   return (
     <div className="flex items-center gap-1.5">
       <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: 'var(--text-3)' }} />
-      <span className="text-xs" style={{ color: 'var(--text-2)' }}>Direct image link</span>
+      <span className="text-xs" style={{ color: 'var(--text-2)' }}>{t('mode_direct')}</span>
     </div>
   )
 }
@@ -422,6 +427,7 @@ const PLATFORM_COLORS = { wistia: '#60a5fa', youtube: '#f87171', vimeo: '#a78bfa
 const CAN_DOWNLOAD    = new Set(['wistia', 'direct'])
 
 function VideoCard({ video }) {
+  const t = useT()
   const [resolving, setResolving]   = useState(false)
   const [resolved, setResolved]     = useState(video.directUrl ? video : null)
   const [err, setErr]               = useState(null)
@@ -502,28 +508,28 @@ function VideoCard({ video }) {
             <a href={resolved.directUrl} target="_blank" rel="noopener noreferrer"
               className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-opacity hover:opacity-80"
               style={{ borderColor: 'var(--border-2)', color: 'var(--text-2)' }}>
-              Preview ↗
+              {t('card_preview')}
             </a>
             {/* Download — fetches directly from CDN in-browser, saves as .mp4 */}
             <button onClick={handleDownload} disabled={downloading}
               className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ background: 'var(--gradient-button)', minWidth: '80px' }}>
               {downloading
-                ? (dlProgress !== null ? `${dlProgress}%` : 'Downloading…')
-                : <><Ic.Download /> Download</>}
+                ? (dlProgress !== null ? `${dlProgress}%` : t('card_downloading'))
+                : <><Ic.Download /> {t('card_download')}</>}
             </button>
           </>
         ) : canDownload && video.wistiaHash ? (
           <button onClick={handleResolve} disabled={resolving}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-opacity hover:opacity-80 disabled:opacity-50 border"
             style={{ borderColor: color, color, background: `${color}12` }}>
-            {resolving ? '…' : 'Resolve'}
+            {resolving ? '…' : t('card_resolve')}
           </button>
         ) : (
           <a href={video.embedUrl || video.url} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-opacity hover:opacity-80"
             style={{ borderColor: 'var(--border-2)', color: 'var(--text-2)' }}>
-            Watch ↗
+            {t('card_watch')}
           </a>
         )}
       </div>
@@ -599,6 +605,7 @@ function ResultItem({ status, onPreview }) {
 
 // ─── URL action button (Paste when empty, Copy when has content) ──────────────
 function UrlActionBtn({ template, onPaste, disabled }) {
+  const t = useT()
   const [copied, setCopied] = useState(false)
 
   async function handleCopy() {
@@ -623,7 +630,7 @@ function UrlActionBtn({ template, onPaste, disabled }) {
         onMouseEnter={e => { if (!copied) e.currentTarget.style.color = 'var(--violet)' }}
         onMouseLeave={e => { if (!copied) e.currentTarget.style.color = 'var(--text-2)' }}>
         {copied ? <Ic.Check /> : <Ic.Copy />}
-        <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy'}</span>
+        <span className="hidden sm:inline">{copied ? '✓' : t('btn_copy')}</span>
       </button>
     )
   }
@@ -635,13 +642,14 @@ function UrlActionBtn({ template, onPaste, disabled }) {
       onMouseEnter={e => e.currentTarget.style.color = 'var(--violet)'}
       onMouseLeave={e => e.currentTarget.style.color = 'var(--text-2)'}>
       <Ic.Clipboard />
-      <span className="hidden sm:inline">Paste</span>
+      <span className="hidden sm:inline">{t('btn_paste')}</span>
     </button>
   )
 }
 
 // ─── URL Preview List (expandable) ───────────────────────────────────────────
 function UrlPreviewList({ urls }) {
+  const t = useT()
   const [expanded, setExpanded] = useState(false)
   const MAX = 3
   const visible = expanded || urls.length <= MAX + 1 ? urls : urls.slice(0, MAX)
@@ -659,7 +667,7 @@ function UrlPreviewList({ urls }) {
           <button onClick={() => setExpanded(true)}
             className="text-left hover:underline"
             style={{ color: 'var(--violet)' }}>
-            + {hiddenCount.toLocaleString()} more — tap to expand
+            {t('expand_more', { n: hiddenCount.toLocaleString() })}
           </button>
           <a href={urls[urls.length - 1]} target="_blank" rel="noopener noreferrer"
             className="truncate block hover:underline"
@@ -672,7 +680,7 @@ function UrlPreviewList({ urls }) {
         <button onClick={() => setExpanded(false)}
           className="text-left hover:underline"
           style={{ color: 'var(--text-3)' }}>
-          collapse
+          {t('collapse')}
         </button>
       )}
     </div>
@@ -684,6 +692,7 @@ const FILE_CATEGORY_COLORS = { audio: '#34d399', document: '#60a5fa' }
 const FILE_EXT_LABELS = { pdf: 'PDF', mp3: 'MP3', wav: 'WAV', flac: 'FLAC', aac: 'AAC', m4a: 'M4A', ogg: 'OGG', opus: 'Opus', wma: 'WMA', epub: 'EPUB', docx: 'DOCX', doc: 'DOC', xlsx: 'XLSX', xls: 'XLS', pptx: 'PPTX', ppt: 'PPT', zip: 'ZIP', rar: 'RAR' }
 
 function FileCard({ file }) {
+  const t = useT()
   const label = FILE_EXT_LABELS[file.ext] || file.ext?.toUpperCase() || 'FILE'
   const color = FILE_CATEGORY_COLORS[file.category] || 'var(--text-2)'
   const proxyUrl = `/api/proxy?url=${encodeURIComponent(file.url)}`
@@ -698,12 +707,12 @@ function FileCard({ file }) {
         <a href={file.url} target="_blank" rel="noopener noreferrer"
           className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-opacity hover:opacity-80"
           style={{ borderColor: 'var(--border-2)', color: 'var(--text-2)' }}>
-          Open ↗
+          {t('card_open')}
         </a>
         <a href={proxyUrl} download={file.name}
           className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-white"
           style={{ background: 'var(--gradient-button)' }}>
-          <Ic.Download /> Save
+          <Ic.Download /> {t('card_save')}
         </a>
       </div>
     </div>
@@ -712,13 +721,14 @@ function FileCard({ file }) {
 
 // ─── Legal Disclaimer ─────────────────────────────────────────────────────────
 function LegalDisclaimer() {
+  const t = useT()
   const [open, setOpen] = useState(false)
   return (
     <div className="mt-6 rounded-2xl border overflow-hidden text-[11px]" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
       <button onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-4 py-3 text-left transition-colors"
         style={{ color: 'var(--text-3)' }}>
-        <span className="font-medium tracking-wide uppercase text-[10px]">Legal & Usage Policy</span>
+        <span className="font-medium tracking-wide uppercase text-[10px]">{t('legal_header')}</span>
         <span className="text-base leading-none" style={{ transform: open ? 'rotate(180deg)' : 'none', display: 'inline-block', transition: 'transform 0.2s' }}>⌄</span>
       </button>
       {open && (
@@ -765,6 +775,128 @@ function LegalDisclaimer() {
   )
 }
 
+// ─── Language Request Modal ───────────────────────────────────────────────────
+function LanguageRequestModal({ onClose }) {
+  const t = useT()
+  const [value, setValue] = useState('')
+  const [sent, setSent] = useState(false)
+  const [sending, setSending] = useState(false)
+  const formspreeId = import.meta.env.VITE_FORMSPREE_ID
+
+  async function submit(e) {
+    e.preventDefault()
+    if (!value.trim()) return
+    setSending(true)
+    try {
+      if (formspreeId) {
+        await fetch(`https://formspree.io/f/${formspreeId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ language: value, _subject: 'Language Request — Image & Video Downloader' }),
+        })
+      }
+      setSent(true)
+    } catch (_e) {
+      setSent(true)
+    } finally { setSending(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4"
+      style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+      onClick={onClose}>
+      <div className="rounded-2xl border shadow-2xl p-6 w-full max-w-sm"
+        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+        onClick={e => e.stopPropagation()}>
+        {sent ? (
+          <div className="text-center space-y-4">
+            <p className="text-2xl">🙏</p>
+            <p className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>{t('lang_request_thanks')}</p>
+            <button onClick={onClose} className="w-full rounded-xl py-2.5 text-sm font-semibold text-white"
+              style={{ background: 'var(--gradient-button)' }}>
+              {t('lang_request_close')}
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={submit} className="space-y-4">
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('lang_request_title')}</p>
+            <input type="text" value={value} onChange={e => setValue(e.target.value)}
+              placeholder={t('lang_request_ph')} autoFocus
+              className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none border"
+              style={{ background: 'var(--bg)', borderColor: 'var(--border-2)', color: 'var(--text-1)' }} />
+            <div className="flex gap-2">
+              <button type="button" onClick={onClose}
+                className="flex-1 rounded-xl py-2.5 text-sm font-medium border transition-colors"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-2)', background: 'transparent' }}>
+                {t('lang_request_close')}
+              </button>
+              <button type="submit" disabled={!value.trim() || sending}
+                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                style={{ background: 'var(--gradient-button)' }}>
+                {sending ? t('lang_request_sending') : t('lang_request_submit')}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Language Picker ──────────────────────────────────────────────────────────
+function LanguagePicker({ lang, setLang }) {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const [requestOpen, setRequestOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+
+  return (
+    <>
+      {requestOpen && <LanguageRequestModal onClose={() => setRequestOpen(false)} />}
+      <div ref={ref} className="relative">
+        <button onClick={() => setOpen(o => !o)}
+          className="fixed top-4 z-40 flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium border transition-all"
+          style={{ right: '6rem', background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
+          🌐 <span className="hidden sm:inline">{LANGUAGES[lang]?.label ?? 'English'}</span>
+        </button>
+        {open && (
+          <div className="fixed top-12 z-50 rounded-2xl border shadow-xl overflow-hidden"
+            style={{ right: '6rem', width: '13rem', background: 'var(--surface)', borderColor: 'var(--border)' }}>
+            {Object.entries(LANGUAGES).map(([code, { label, flag }]) => (
+              <button key={code} onClick={() => { setLang(code); setOpen(false) }}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left transition-colors"
+                style={{
+                  color: code === lang ? 'var(--violet)' : 'var(--text-1)',
+                  fontWeight: code === lang ? 600 : 400,
+                  background: 'transparent',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <span>{flag}</span> {label}
+                {code === lang && <span className="ml-auto text-[11px]" style={{ color: 'var(--violet)' }}>✓</span>}
+              </button>
+            ))}
+            <div className="border-t px-3.5 py-2.5" style={{ borderColor: 'var(--border)' }}>
+              <button onClick={() => { setOpen(false); setRequestOpen(true) }}
+                className="flex items-center gap-1.5 text-xs hover:underline w-full text-left"
+                style={{ color: 'var(--text-3)' }}>
+                ✉ {t('request_language')}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
 // ─── Tooltip ─────────────────────────────────────────────────────────────────
 function Tooltip({ content, children }) {
   const [open, setOpen] = useState(false)
@@ -795,6 +927,17 @@ export default function App() {
     document.documentElement.classList.toggle('dark', dark)
     try { localStorage.setItem('theme', dark ? 'dark' : 'light') } catch {}
   }, [dark])
+
+  const [lang, setLang] = useState(() => {
+    try {
+      const saved = localStorage.getItem('lang')
+      if (saved && LANGUAGES[saved]) return saved
+      const browser = navigator.language?.split('-')[0] || 'en'
+      return LANGUAGES[browser] ? browser : 'en'
+    } catch { return 'en' }
+  })
+  useEffect(() => { try { localStorage.setItem('lang', lang) } catch {} }, [lang])
+  const t = useMemo(() => makeT(lang), [lang])
 
   const [autoSave, setAutoSave] = useState(() => {
     try { return localStorage.getItem('autoSave') !== 'false' } catch { return true }
@@ -861,7 +1004,7 @@ export default function App() {
       const res  = await fetch(`/api/proxy?mode=scan&url=${encodeURIComponent(urls[0])}`)
       const contentType = res.headers.get('content-type') || ''
       if (!contentType.includes('application/json')) {
-        setScanError('Scan API is unavailable on this deployment. Redeploy on Vercel with the /api functions, or run npm run dev locally so the API server starts.')
+        setScanError(t('err_unavailable'))
         setPhase('idle')
         return
       }
@@ -871,7 +1014,7 @@ export default function App() {
       const hasImages = data.images?.length > 0
       const hasVideos = data.videos?.length > 0
       if (!hasImages && !hasVideos) {
-        setScanError("Nothing found in the page source. If you see a video in your browser, it may load via JavaScript — try pasting the Wistia media URL directly.")
+        setScanError(t('err_nothing_found'))
         setPhase('idle'); return
       }
       const imgs = data.images || []
@@ -995,7 +1138,11 @@ export default function App() {
     ? urls : [...urls.slice(0, MAX_PREV), null, urls[urls.length - 1]]
 
   return (
+    <T.Provider value={t}>
     <div className="min-h-screen transition-colors duration-200">
+
+      {/* Language picker */}
+      <LanguagePicker lang={lang} setLang={setLang} />
 
       {/* Dark mode toggle */}
       <button onClick={() => setDark(d => !d)}
@@ -1023,7 +1170,7 @@ export default function App() {
               Image &amp; Video Downloader
             </h1>
             <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
-              Paste a URL to download images or videos — single file, numbered series, or full page scan.
+              {t('subtitle')}
             </p>
           </header>
 
@@ -1040,7 +1187,7 @@ export default function App() {
                     type="text"
                     value={template}
                     onChange={e => onInput(e.target.value)}
-                    placeholder="Paste image URL, video URL, or page URL…"
+                    placeholder={t('url_placeholder')}
                     disabled={isBusy || phase === 'scanning'}
                     className="flex-1 px-3.5 py-2.5 text-sm bg-transparent outline-none min-w-0 disabled:opacity-50"
                     style={{ color: 'var(--text-1)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '13px' }}
@@ -1124,22 +1271,22 @@ export default function App() {
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {scannedVideos.length > 0 && (
                       <button onClick={() => setActiveTab('videos')} className="rounded-full text-[11px] font-medium transition-all" style={chipStyle('videos')}>
-                        Videos ({scannedVideos.length})
+                        {t('tab_videos', { n: scannedVideos.length })}
                       </button>
                     )}
                     {qualityImages.length > 0 && (
                       <button onClick={() => setActiveTab('quality')} className="rounded-full text-[11px] font-medium transition-all" style={chipStyle('quality')}>
-                        Photos ({qualityImages.length})
+                        {t('tab_photos', { n: qualityImages.length })}
                       </button>
                     )}
                     {otherImages.length > 0 && (
                       <button onClick={() => setActiveTab('other')} className="rounded-full text-[11px] font-medium transition-all" style={chipStyle('other')}>
-                        Site assets ({otherImages.length})
+                        {t('tab_assets', { n: otherImages.length })}
                       </button>
                     )}
                     {scannedFiles.length > 0 && (
                       <button onClick={() => setActiveTab('files')} className="rounded-full text-[11px] font-medium transition-all" style={chipStyle('files')}>
-                        Files ({scannedFiles.length})
+                        {t('tab_files', { n: scannedFiles.length })}
                       </button>
                     )}
                   </div>
@@ -1180,7 +1327,7 @@ export default function App() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                   </svg>
-                  Looking for images on this page…
+                  {t('status_scanning')}
                 </div>
               )}
 
@@ -1189,7 +1336,7 @@ export default function App() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs" style={{ color: 'var(--text-2)' }}>
-                      {phase === 'zipping' ? `Packaging ZIP…` : `Downloading ${done} of ${displayUrls.length}`}
+                      {phase === 'zipping' ? t('status_packaging') : t('status_downloading', { done, total: displayUrls.length })}
                     </span>
                     <span className="text-xs tabular-nums font-medium" style={{ color: 'var(--text-1)' }}>
                       {phase === 'zipping' ? `${zipPct ?? 0}%` : `${pct}%`}
@@ -1211,7 +1358,7 @@ export default function App() {
                       <Ic.Check />
                     </div>
                     <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                      {ok} image{ok !== 1 ? 's' : ''} ready{fail > 0 ? ` · ${fail} failed` : ''}
+                      {t('status_ready', { n: ok })}{fail > 0 ? ` ${t('status_failed', { n: fail })}` : ''}
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
@@ -1219,7 +1366,7 @@ export default function App() {
                       <button onClick={onRetryFailed}
                         className="text-xs font-medium transition-colors"
                         style={{ color: '#f59e0b' }}>
-                        ↻ Retry {fail} failed
+                        {t('btn_retry', { n: fail })}
                       </button>
                     )}
                     {previews.length > 0 && (
@@ -1243,7 +1390,7 @@ export default function App() {
                     style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
                     onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
                     onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
-                    <Ic.Download /> Save as ZIP ({ok} image{ok !== 1 ? 's' : ''})
+                    <Ic.Download /> {t('btn_save_zip', { n: ok })}
                   </button>
                 )}
 
@@ -1252,7 +1399,7 @@ export default function App() {
                   <button disabled
                     className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white opacity-80 cursor-not-allowed"
                     style={{ background: 'var(--gradient-button)' }}>
-                    {phase === 'zipping' ? 'Packaging ZIP…' : `Downloading… ${done}/${displayUrls.length}`}
+                    {phase === 'zipping' ? t('status_packaging') : t('status_downloading', { done, total: displayUrls.length })}
                   </button>
                 )}
 
@@ -1263,7 +1410,7 @@ export default function App() {
                     style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
                     onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
                     onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
-                    <Ic.Download /> Download {activeTab === 'other' ? 'Assets' : 'Photos'} ({displayUrls.length.toLocaleString()})
+                    <Ic.Download /> {activeTab === 'other' ? t('btn_download_assets', { n: displayUrls.length.toLocaleString() }) : t('btn_download_photos', { n: displayUrls.length.toLocaleString() })}
                   </button>
                 )}
 
@@ -1277,14 +1424,14 @@ export default function App() {
                         style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
                         onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
                         onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
-                        <Ic.Scan /> Scan Page
+                        <Ic.Scan /> {t('btn_scan')}
                       </button>
                       <button onClick={onDownload}
                         className="w-full flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-all border"
                         style={{ borderColor: 'var(--border)', color: 'var(--text-2)', background: 'transparent' }}
                         onMouseEnter={e => e.currentTarget.style.borderColor='var(--border-2)'}
                         onMouseLeave={e => e.currentTarget.style.borderColor='var(--border)'}>
-                        <Ic.Download /> Try direct download instead
+                        <Ic.Download /> {t('btn_try_direct')}
                       </button>
                     </div>
                   ) : (
@@ -1295,14 +1442,14 @@ export default function App() {
                         style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
                         onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
                         onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
-                        <Ic.Download /> {isWistia ? 'Resolve Video' : 'Download'}
+                        <Ic.Download /> {isWistia ? t('card_resolve') : t('card_download')}
                       </button>
                       <button onClick={onScan}
                         className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-medium transition-all border"
                         style={{ background: 'var(--violet-bg)', borderColor: 'var(--violet-border)', color: 'var(--violet)' }}
                         onMouseEnter={e => e.currentTarget.style.opacity='0.85'}
                         onMouseLeave={e => e.currentTarget.style.opacity='1'}>
-                        <Ic.Scan /> Scan Page
+                        <Ic.Scan /> {t('btn_scan')}
                       </button>
                     </div>
                   )
@@ -1314,7 +1461,7 @@ export default function App() {
                     <button onClick={onCancel}
                       className="flex-1 rounded-xl py-2.5 text-sm font-medium transition-all border"
                       style={{ borderColor: 'var(--border-2)', color: 'var(--text-2)', background: 'transparent' }}>
-                      Cancel
+                      {t('btn_cancel')}
                     </button>
                   )}
                   {(phase === 'done' || statuses.length > 0) && !isBusy && phase !== 'scanning' && (
@@ -1323,7 +1470,7 @@ export default function App() {
                       style={{ borderColor: 'var(--border)', color: 'var(--text-2)', background: 'transparent' }}
                       onMouseEnter={e => e.currentTarget.style.borderColor='var(--border-2)'}
                       onMouseLeave={e => e.currentTarget.style.borderColor='var(--border)'}>
-                      Clear
+                      {t('btn_clear')}
                     </button>
                   )}
                 </div>
@@ -1336,14 +1483,14 @@ export default function App() {
               <div className="flex items-center gap-1.5">
                 <Tooltip content={
                   <div className="space-y-1.5">
-                    <p><span className="font-medium" style={{ color: 'var(--text-1)' }}>Numbered series:</span> use <code className="px-1 py-0.5 rounded" style={{ background: 'var(--bg)' }}>photo[1–50].jpg</code></p>
-                    <p><span className="font-medium" style={{ color: 'var(--text-1)' }}>Full page scan:</span> paste a page URL and tap Scan</p>
-                    <p><span className="font-medium" style={{ color: 'var(--text-1)' }}>Wistia video:</span> paste a Wistia URL to download as MP4</p>
+                    <p><span className="font-medium" style={{ color: 'var(--text-1)' }}>{t('hint_series')}</span> {t('hint_series_detail')}</p>
+                    <p><span className="font-medium" style={{ color: 'var(--text-1)' }}>{t('hint_scan')}</span> {t('hint_scan_detail')}</p>
+                    <p><span className="font-medium" style={{ color: 'var(--text-1)' }}>{t('hint_wistia')}</span> {t('hint_wistia_detail')}</p>
                   </div>
                 }>
                   <span className="inline-flex items-center gap-1 text-[11px] select-none" style={{ color: 'var(--text-3)' }}>
                     <span className="text-[13px] leading-none">ⓘ</span>
-                    <span>Supports images, videos, numbered sequences, and full-page scans</span>
+                    <span>{t('hint_row')}</span>
                   </span>
                 </Tooltip>
               </div>
@@ -1351,8 +1498,8 @@ export default function App() {
               {/* Auto-save toggle */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <p className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>Auto-save</p>
-                  <Tooltip content="When on, the ZIP downloads automatically when all images finish. When off, you can preview first and save manually.">
+                  <p className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{t('autosave_label')}</p>
+                  <Tooltip content={t('autosave_tooltip')}>
                     <span className="text-[13px] leading-none select-none" style={{ color: 'var(--text-3)' }}>ⓘ</span>
                   </Tooltip>
                 </div>
@@ -1400,10 +1547,11 @@ export default function App() {
           <LegalDisclaimer />
 
           <p className="mt-4 text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
-            Everything runs in your browser — no files leave your machine.
+            {t('footer')}
           </p>
         </div>
       </div>
     </div>
+    </T.Provider>
   )
 }
