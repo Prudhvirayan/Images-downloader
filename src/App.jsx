@@ -814,7 +814,7 @@ function FeedbackModal({ onClose }) {
               autoFocus
               className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none border resize-none"
               style={{ background: 'var(--bg)', borderColor: 'var(--border-2)', color: 'var(--text-1)', lineHeight: '1.5' }} />
-            <input type="hidden" name="_subject" value="Feedback — Image & Video Downloader" />
+            <input type="hidden" name="_subject" value="Feedback — Download Anything" />
             <div className="flex gap-2">
               <button type="button" onClick={onClose}
                 className="flex-1 rounded-xl py-2.5 text-sm font-medium border transition-colors"
@@ -908,6 +908,16 @@ export default function App() {
   }, [dark])
 
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+
+  // Cursor-following glow — updates CSS custom props read by body::before
+  useEffect(() => {
+    const move = (e) => {
+      document.documentElement.style.setProperty('--glow-x', `${e.clientX}px`)
+      document.documentElement.style.setProperty('--glow-y', `${e.clientY}px`)
+    }
+    window.addEventListener('mousemove', move, { passive: true })
+    return () => window.removeEventListener('mousemove', move)
+  }, [])
 
   const [lang, setLang] = useState(() => {
     try {
@@ -1138,27 +1148,27 @@ export default function App() {
         <Lightbox images={previews} startIndex={Math.min(lbIdx, previews.length - 1)} onClose={() => setLbIdx(null)} />
       )}
 
-      <div className="flex flex-col items-center px-3 sm:px-4 pt-20 pb-16 min-h-screen" style={{ background: 'var(--gradient-bg)' }}>
-        <div className="w-full max-w-[480px] md:max-w-[520px]">
+      <div className="flex flex-col items-center px-4 sm:px-6 pt-20 pb-20 min-h-screen" style={{ background: 'var(--gradient-bg)' }}>
+        <div className="w-full max-w-[600px] sm:max-w-[700px] md:max-w-[820px] lg:max-w-[920px]">
 
           {/* ── Header ── */}
-          <header className="mb-8 text-center">
-            <div className="inline-flex flex-col items-center gap-[3px] mb-5" aria-hidden="true">
-              <span className="block w-5 h-[3px] rounded-full" style={{ background: 'var(--gradient-button)' }} />
-              <span className="block w-3.5 h-[3px] rounded-full opacity-60" style={{ background: 'var(--gradient-button)' }} />
-              <span className="block w-2 h-[3px] rounded-full opacity-30" style={{ background: 'var(--gradient-button)' }} />
+          <header className="mb-10 md:mb-14 text-center">
+            <div className="inline-flex flex-col items-center gap-[4px] mb-6" aria-hidden="true">
+              <span className="block w-8 h-[3px] rounded-full" style={{ background: 'var(--gradient-button)' }} />
+              <span className="block w-5 h-[3px] rounded-full opacity-55" style={{ background: 'var(--gradient-button)' }} />
+              <span className="block w-3 h-[3px] rounded-full opacity-25" style={{ background: 'var(--gradient-button)' }} />
             </div>
-            <h1 className="text-[32px] font-semibold tracking-tight leading-tight gradient-text" style={{ letterSpacing: '-0.5px' }}>
-              Image &amp; Video Downloader
+            <h1 className="text-[44px] sm:text-[56px] md:text-[68px] font-bold tracking-tight leading-[1.1] gradient-text" style={{ letterSpacing: '-1.5px' }}>
+              Download Anything.
             </h1>
-            <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
+            <p className="mt-3 text-base leading-relaxed max-w-lg mx-auto" style={{ color: 'var(--text-2)' }}>
               {t('subtitle')}
             </p>
           </header>
 
           {/* ── Input card ── */}
           <div className="rounded-2xl border overflow-hidden transition-shadow duration-200 input-card" style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
-            <div className="p-5 space-y-3">
+            <div className="p-6 space-y-4">
 
               {/* URL input */}
               <div className="space-y-1.5">
@@ -1526,20 +1536,27 @@ export default function App() {
             </div>
           )}
 
-          <LegalDisclaimer />
-
-          <div className="mt-4 flex flex-col items-center gap-2">
-            <p className="text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
-              {t('footer')}
-            </p>
+          {/* Feedback CTA — before legal, clearly visible */}
+          <div className="mt-8 flex justify-center">
             <button onClick={() => setFeedbackOpen(true)}
-              className="text-[11px] px-3 py-1 rounded-full border transition-colors hover:border-violet-400"
-              style={{ color: 'var(--text-3)', borderColor: 'var(--border)' }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--violet)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
+              className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium border transition-all hover:scale-105"
+              style={{
+                borderColor: 'var(--border-2)',
+                color: 'var(--text-2)',
+                background: 'var(--surface)',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--violet)'; e.currentTarget.style.color = 'var(--violet)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.color = 'var(--text-2)' }}>
               💬 Help us improve
             </button>
           </div>
+
+          <LegalDisclaimer />
+
+          <p className="mt-4 text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
+            {t('footer')}
+          </p>
         </div>
       </div>
     </div>
