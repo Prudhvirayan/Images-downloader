@@ -728,8 +728,10 @@ function LegalDisclaimer() {
     <div className="mt-6 rounded-2xl border overflow-hidden text-[11px]" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
       <button onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-4 py-3 text-left transition-colors"
-        style={{ color: 'var(--text-3)' }}>
-        <span className="font-medium tracking-wide uppercase text-[10px]">{t('legal_header')}</span>
+        style={{ color: 'var(--text-2)' }}
+        onMouseEnter={e => e.currentTarget.style.color = 'var(--text-1)'}
+        onMouseLeave={e => e.currentTarget.style.color = 'var(--text-2)'}>
+        <span className="font-medium text-[11px] tracking-wider uppercase">{t('legal_header')}</span>
         <span className="text-base leading-none" style={{ transform: open ? 'rotate(180deg)' : 'none', display: 'inline-block', transition: 'transform 0.2s' }}>⌄</span>
       </button>
       {open && (
@@ -909,14 +911,23 @@ export default function App() {
 
   const [feedbackOpen, setFeedbackOpen] = useState(false)
 
-  // Cursor-following glow — updates CSS custom props read by body::before
+  // Cursor-following glow — lerp animation for a smooth "liquid" follow effect
   useEffect(() => {
-    const move = (e) => {
-      document.documentElement.style.setProperty('--glow-x', `${e.clientX}px`)
-      document.documentElement.style.setProperty('--glow-y', `${e.clientY}px`)
+    let animX = window.innerWidth / 2, animY = 120
+    let targetX = animX, targetY = animY
+    let rafId
+    const lerp = (a, b, t) => a + (b - a) * t
+    const tick = () => {
+      animX = lerp(animX, targetX, 0.07)
+      animY = lerp(animY, targetY, 0.07)
+      document.documentElement.style.setProperty('--glow-x', `${animX}px`)
+      document.documentElement.style.setProperty('--glow-y', `${animY}px`)
+      rafId = requestAnimationFrame(tick)
     }
-    window.addEventListener('mousemove', move, { passive: true })
-    return () => window.removeEventListener('mousemove', move)
+    const onMove = (e) => { targetX = e.clientX; targetY = e.clientY }
+    window.addEventListener('mousemove', onMove, { passive: true })
+    rafId = requestAnimationFrame(tick)
+    return () => { window.removeEventListener('mousemove', onMove); cancelAnimationFrame(rafId) }
   }, [])
 
   const [lang, setLang] = useState(() => {
@@ -1133,7 +1144,15 @@ export default function App() {
     {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
     <div className="min-h-screen transition-colors duration-200">
 
-      {/* Language picker */}
+      {/* Top-right action bar: [💬 Feedback] [🌐 Language] [☀ Light] */}
+      <button onClick={() => setFeedbackOpen(true)}
+        className="fixed top-4 z-40 flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium border transition-all"
+        style={{ right: '13.5rem', background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--violet)'; e.currentTarget.style.color = 'var(--violet)' }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-2)' }}>
+        💬 <span className="hidden sm:inline">Feedback</span>
+      </button>
+
       <LanguagePicker lang={lang} setLang={setLang} />
 
       {/* Dark mode toggle */}
@@ -1148,23 +1167,35 @@ export default function App() {
         <Lightbox images={previews} startIndex={Math.min(lbIdx, previews.length - 1)} onClose={() => setLbIdx(null)} />
       )}
 
-      <div className="flex flex-col items-center px-4 sm:px-6 pt-20 pb-20 min-h-screen" style={{ background: 'var(--gradient-bg)' }}>
-        <div className="w-full max-w-[600px] sm:max-w-[700px] md:max-w-[820px] lg:max-w-[920px]">
+      {/* Full-width page, content centered */}
+      <div className="min-h-screen px-4 sm:px-8 pt-28 pb-20" style={{ background: 'var(--gradient-bg)' }}>
+        <div className="w-full max-w-[700px] mx-auto">
 
-          {/* ── Header ── */}
-          <header className="mb-10 md:mb-14 text-center">
-            <div className="inline-flex flex-col items-center gap-[4px] mb-6" aria-hidden="true">
+          {/* ── Hero ── */}
+          <header className="mb-10 text-center">
+            <div className="inline-flex flex-col items-center gap-[4px] mb-7" aria-hidden="true">
               <span className="block w-8 h-[3px] rounded-full" style={{ background: 'var(--gradient-button)' }} />
               <span className="block w-5 h-[3px] rounded-full opacity-55" style={{ background: 'var(--gradient-button)' }} />
               <span className="block w-3 h-[3px] rounded-full opacity-25" style={{ background: 'var(--gradient-button)' }} />
             </div>
-            <h1 className="text-[44px] sm:text-[56px] md:text-[68px] font-bold tracking-tight leading-[1.1] gradient-text" style={{ letterSpacing: '-1.5px' }}>
+            <h1 className="text-[48px] sm:text-[64px] md:text-[80px] font-bold leading-[1.02] gradient-text" style={{ letterSpacing: 'clamp(-1.5px, -0.03em, -3px)' }}>
               Download Anything.
             </h1>
-            <p className="mt-3 text-base leading-relaxed max-w-lg mx-auto" style={{ color: 'var(--text-2)' }}>
+            <p className="mt-4 text-base sm:text-lg leading-relaxed mx-auto" style={{ color: 'var(--text-2)', maxWidth: '46ch' }}>
               {t('subtitle')}
             </p>
+            <div className="flex flex-wrap justify-center gap-2 mt-5">
+              {['Images', 'Videos', 'PDFs', 'Audio', 'Files'].map(f => (
+                <span key={f} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-2)', background: 'var(--surface)' }}>
+                  {f}
+                </span>
+              ))}
+            </div>
           </header>
+
+          {/* ── Card column ── */}
+          <div className="space-y-3">
 
           {/* ── Input card ── */}
           <div className="rounded-2xl border overflow-hidden transition-shadow duration-200 input-card" style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
@@ -1379,7 +1410,7 @@ export default function App() {
                 {phase === 'done' && ok > 0 && (
                   <button onClick={onSaveAgain}
                     className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all"
-                    style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
+                    style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)', transition: 'opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease' }}
                     onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
                     onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
                     <Ic.Download /> {t('btn_save_zip', { n: ok })}
@@ -1399,7 +1430,7 @@ export default function App() {
                 {phase === 'idle' && (!isSingle || isScanned) && displayUrls.length > 0 && !parseError && activeTab !== 'videos' && activeTab !== 'files' && (
                   <button onClick={onDownload} disabled={phase === 'scanning'}
                     className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
+                    style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)', transition: 'opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease' }}
                     onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
                     onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
                     <Ic.Download /> {activeTab === 'other' ? t('btn_download_assets', { n: displayUrls.length.toLocaleString() }) : t('btn_download_photos', { n: displayUrls.length.toLocaleString() })}
@@ -1413,7 +1444,7 @@ export default function App() {
                     <div className="space-y-2">
                       <button onClick={onScan}
                         className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all"
-                        style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
+                        style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)', transition: 'opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease' }}
                         onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
                         onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
                         <Ic.Scan /> {t('btn_scan')}
@@ -1431,7 +1462,7 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-2">
                       <button onClick={onDownload}
                         className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold text-white transition-all"
-                        style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
+                        style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)', transition: 'opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease' }}
                         onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
                         onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
                         <Ic.Download /> {isWistia ? t('card_resolve') : t('card_download')}
@@ -1536,29 +1567,14 @@ export default function App() {
             </div>
           )}
 
-          {/* Feedback CTA — before legal, clearly visible */}
-          <div className="mt-8 flex justify-center">
-            <button onClick={() => setFeedbackOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium border transition-all hover:scale-105"
-              style={{
-                borderColor: 'var(--border-2)',
-                color: 'var(--text-2)',
-                background: 'var(--surface)',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--violet)'; e.currentTarget.style.color = 'var(--violet)' }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.color = 'var(--text-2)' }}>
-              💬 Help us improve
-            </button>
-          </div>
-
           <LegalDisclaimer />
 
           <p className="mt-4 text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
             {t('footer')}
           </p>
-        </div>
-      </div>
+        </div>{/* end card column */}
+      </div>{/* end centered container */}
+      </div>{/* end full-width page */}
     </div>
     </T.Provider>
   )
