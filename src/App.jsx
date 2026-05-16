@@ -679,6 +679,92 @@ function UrlPreviewList({ urls }) {
   )
 }
 
+// ─── FileCard ─────────────────────────────────────────────────────────────────
+const FILE_CATEGORY_COLORS = { audio: '#34d399', document: '#60a5fa' }
+const FILE_EXT_LABELS = { pdf: 'PDF', mp3: 'MP3', wav: 'WAV', flac: 'FLAC', aac: 'AAC', m4a: 'M4A', ogg: 'OGG', opus: 'Opus', wma: 'WMA', epub: 'EPUB', docx: 'DOCX', doc: 'DOC', xlsx: 'XLSX', xls: 'XLS', pptx: 'PPTX', ppt: 'PPT', zip: 'ZIP', rar: 'RAR' }
+
+function FileCard({ file }) {
+  const label = FILE_EXT_LABELS[file.ext] || file.ext?.toUpperCase() || 'FILE'
+  const color = FILE_CATEGORY_COLORS[file.category] || 'var(--text-2)'
+  const proxyUrl = `/api/proxy?url=${encodeURIComponent(file.url)}`
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: `${color}18`, color }}>{label}</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }} title={file.name}>{file.name}</p>
+        <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--text-3)' }} title={file.url}>{file.url}</p>
+      </div>
+      <div className="flex-shrink-0 flex gap-1.5">
+        <a href={file.url} target="_blank" rel="noopener noreferrer"
+          className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-opacity hover:opacity-80"
+          style={{ borderColor: 'var(--border-2)', color: 'var(--text-2)' }}>
+          Open ↗
+        </a>
+        <a href={proxyUrl} download={file.name}
+          className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-white"
+          style={{ background: 'var(--gradient-button)' }}>
+          <Ic.Download /> Save
+        </a>
+      </div>
+    </div>
+  )
+}
+
+// ─── Legal Disclaimer ─────────────────────────────────────────────────────────
+function LegalDisclaimer() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="mt-6 rounded-2xl border overflow-hidden text-[11px]" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+      <button onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left transition-colors"
+        style={{ color: 'var(--text-3)' }}>
+        <span className="font-medium tracking-wide uppercase text-[10px]">Legal & Usage Policy</span>
+        <span className="text-base leading-none" style={{ transform: open ? 'rotate(180deg)' : 'none', display: 'inline-block', transition: 'transform 0.2s' }}>⌄</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-5 space-y-3 leading-relaxed border-t" style={{ borderColor: 'var(--border)', color: 'var(--text-2)' }}>
+          <div className="pt-3 text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-3)' }}>Last updated: May 2026</div>
+
+          <section>
+            <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>1. User Responsibility</p>
+            <p>By using this tool, you acknowledge and agree that you are solely responsible for ensuring that you have all appropriate rights, licenses, authorizations, or permissions before downloading, reproducing, distributing, or otherwise using any content obtained through this service, particularly for commercial purposes.</p>
+          </section>
+
+          <section>
+            <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>2. No Verification of Rights</p>
+            <p>This platform does not verify, validate, or confirm the ownership, copyright status, licensing terms, or usage rights of any third-party content accessible through this service. The technical capability to access or download a file does not imply that you are legally entitled to do so. Availability through this tool is not a representation that any content is free, public domain, or licensed for reuse.</p>
+          </section>
+
+          <section>
+            <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>3. Copyright & Intellectual Property</p>
+            <p>A significant portion of content available online is protected by copyright, trademark, and other intellectual property laws. Downloading, reproducing, or distributing protected material without authorization from the rights holder may constitute infringement and may expose you to civil liability or criminal penalties. Commercial use of third-party content typically requires explicit licensing from the rights holder.</p>
+          </section>
+
+          <section>
+            <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>4. Limitation of Liability</p>
+            <p>This platform and its operators expressly disclaim all liability for any misuse, copyright infringement, violation of third-party terms of service, unauthorized distribution, or any other unlawful use of content downloaded through this service. The tool is provided "as is," without warranties of any kind, express or implied. Use is entirely at your own risk.</p>
+          </section>
+
+          <section>
+            <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>5. Third-Party Terms of Service</p>
+            <p>Many websites and platforms prohibit automated access, scraping, or downloading of their content through their Terms of Service. You are solely responsible for reviewing and complying with the applicable terms of service of any website or platform from which you download content using this tool.</p>
+          </section>
+
+          <section>
+            <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>6. DMCA Compliance</p>
+            <p>This service respects intellectual property rights and operates in compliance with the Digital Millennium Copyright Act (DMCA) and other applicable copyright laws. This tool does not circumvent any technical protection measures (DRM). Content that is not publicly accessible without authentication cannot be downloaded through this service.</p>
+          </section>
+
+          <section>
+            <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>7. Permitted Use</p>
+            <p>This tool is intended for lawful purposes including accessing content you own or have the right to use, downloading freely licensed or public domain material, personal archiving of legally accessible content, and academic or research use consistent with applicable fair use or fair dealing provisions. These exceptions are narrow and do not constitute general authorization to download protected content.</p>
+          </section>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Tooltip ─────────────────────────────────────────────────────────────────
 function Tooltip({ content, children }) {
   const [open, setOpen] = useState(false)
@@ -729,7 +815,8 @@ export default function App() {
   const [scanError, setScanError]   = useState(null)
   const [scannedVideos, setScannedVideos] = useState([])
   const [scannedImages, setScannedImages] = useState([])  // {url, score}[]
-  const [activeTab, setActiveTab]         = useState('quality') // 'videos'|'quality'|'other'
+  const [scannedFiles, setScannedFiles]   = useState([])  // {url, name, ext, category}[]
+  const [activeTab, setActiveTab]         = useState('quality') // 'videos'|'quality'|'other'|'files'
   const [statuses, setStatuses]     = useState([])
   const [done, setDone]             = useState(0)
   const [zipPct, setZipPct]         = useState(null)
@@ -739,7 +826,9 @@ export default function App() {
   const objUrlsRef = useRef([])
 
   const WISTIA_URL_RE  = /wistia\.com\/(?:embed\/medias|medias)\/([a-zA-Z0-9]+)/
-  const IMG_EXT_RE_SMP = /\.(jpe?g|png|gif|webp|avif|bmp|svg)(\?.*)?$/i
+  const IMG_EXT_RE_SMP   = /\.(jpe?g|png|gif|webp|avif|bmp|svg)(\?.*)?$/i
+  const AUDIO_EXT_RE_SMP = /\.(mp3|wav|ogg|flac|aac|m4a|opus|wma)(\?.*)?$/i
+  const DOC_EXT_RE_SMP   = /\.(pdf|epub|docx?|xlsx?|pptx?|zip|rar)(\?.*)?$/i
 
   const onInput = useCallback((value) => {
     setTemplate(value)
@@ -747,6 +836,7 @@ export default function App() {
     setIsScanned(false)
     setScannedVideos([])
     setScannedImages([])
+    setScannedFiles([])
     setActiveTab('quality')
     const { error, urls: parsed, single } = parseUrlTemplate(value)
     setParseError(error)
@@ -755,7 +845,9 @@ export default function App() {
     const wistia = single && WISTIA_URL_RE.test(value)
     setIsWistia(wistia)
     // A single URL that doesn't look like a direct image file is a web page
-    setIsWebPage(single && !wistia && !IMG_EXT_RE_SMP.test(value.split('?')[0]))
+    const path0 = value.split('?')[0]
+    const isDirectFile = IMG_EXT_RE_SMP.test(path0) || AUDIO_EXT_RE_SMP.test(path0) || DOC_EXT_RE_SMP.test(path0)
+    setIsWebPage(single && !wistia && !isDirectFile)
   }, [])
 
   const onPaste = useCallback(async () => {
@@ -784,13 +876,16 @@ export default function App() {
       }
       const imgs = data.images || []
       const vids = data.videos || []
+      const fils = data.files  || []
       setScannedImages(imgs)
       setScannedVideos(vids)
+      setScannedFiles(fils)
       setUrls([]); setIsSingle(false); setIsScanned(true)
-      // default tab: videos if any, else quality if any, else other
+      // default tab: videos if any, else quality if any, else files, else other
       const hasVids = vids.length > 0
       const hasQual = imgs.some(i => i.score > 0)
-      setActiveTab(hasVids ? 'videos' : hasQual ? 'quality' : 'other')
+      const hasFils = fils.length > 0
+      setActiveTab(hasVids ? 'videos' : hasQual ? 'quality' : hasFils ? 'files' : 'other')
     } catch (e) {
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
       setScanError(isLocal
@@ -875,7 +970,7 @@ export default function App() {
     objUrlsRef.current.forEach(u => URL.revokeObjectURL(u)); objUrlsRef.current = []
     setTemplate(''); setUrls([]); setParseError(null); setScanError(null)
     setIsSingle(false); setIsScanned(false); setIsWistia(false); setIsWebPage(false); setScannedVideos([])
-    setScannedImages([]); setActiveTab('quality')
+    setScannedImages([]); setScannedFiles([]); setActiveTab('quality')
     setPhase('idle'); setStatuses([]); setDone(0); setZipPct(null); setLbIdx(null)
   }, [])
 
@@ -1016,8 +1111,8 @@ export default function App() {
                 )}
               </div>
 
-              {/* Scan result tabs: Videos / Quality / Other */}
-              {isScanned && (scannedImages.length > 0 || scannedVideos.length > 0) && (() => {
+              {/* Scan result tabs: Videos / Photos / Site assets / Files */}
+              {isScanned && (scannedImages.length > 0 || scannedVideos.length > 0 || scannedFiles.length > 0) && (() => {
                 const chipStyle = (tab) => ({
                   padding: '3px 10px',
                   background: activeTab === tab ? 'var(--gradient-button)' : 'var(--bg)',
@@ -1042,6 +1137,11 @@ export default function App() {
                         Site assets ({otherImages.length})
                       </button>
                     )}
+                    {scannedFiles.length > 0 && (
+                      <button onClick={() => setActiveTab('files')} className="rounded-full text-[11px] font-medium transition-all" style={chipStyle('files')}>
+                        Files ({scannedFiles.length})
+                      </button>
+                    )}
                   </div>
                 )
               })()}
@@ -1053,8 +1153,15 @@ export default function App() {
                 </div>
               )}
 
+              {/* Files tab content */}
+              {isScanned && activeTab === 'files' && scannedFiles.length > 0 && (
+                <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'var(--border)' }}>
+                  {scannedFiles.map((f, i) => <FileCard key={i} file={f} />)}
+                </div>
+              )}
+
               {/* URL / scan result preview — images tabs only */}
-              {((isScanned && activeTab !== 'videos' && displayUrls.length > 0) || (urls.length > 1 && !isScanned)) && !parseError && (
+              {((isScanned && activeTab !== 'videos' && activeTab !== 'files' && displayUrls.length > 0) || (urls.length > 1 && !isScanned)) && !parseError && (
                 <UrlPreviewList urls={isScanned ? displayUrls : urls} />
               )}
 
@@ -1150,7 +1257,7 @@ export default function App() {
                 )}
 
                 {/* ── Phase: idle — sequence or scanned (not videos tab) ── */}
-                {phase === 'idle' && (!isSingle || isScanned) && displayUrls.length > 0 && !parseError && activeTab !== 'videos' && (
+                {phase === 'idle' && (!isSingle || isScanned) && displayUrls.length > 0 && !parseError && activeTab !== 'videos' && activeTab !== 'files' && (
                   <button onClick={onDownload} disabled={phase === 'scanning'}
                     className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)' }}
@@ -1290,7 +1397,9 @@ export default function App() {
             </div>
           )}
 
-          <p className="mt-8 text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
+          <LegalDisclaimer />
+
+          <p className="mt-4 text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
             Everything runs in your browser — no files leave your machine.
           </p>
         </div>

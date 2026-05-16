@@ -1,4 +1,4 @@
-import { fetchImageFromUrl, httpErrorMessage, isImage, extractAllImagesFromHtml, extractVideosFromHtml, resolveWistiaVideo, BROWSER_HEADERS } from './shared.js'
+import { fetchImageFromUrl, httpErrorMessage, isImage, extractAllImagesFromHtml, extractVideosFromHtml, extractFilesFromHtml, resolveWistiaVideo, BROWSER_HEADERS } from './shared.js'
 
 const GOOGLEBOT_UA = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
 
@@ -24,7 +24,7 @@ export default async function handler(req, res) {
       const contentType = response.headers.get('content-type') || ''
 
       if (isImage(contentType)) {
-        return res.json({ images: [{ url, score: 99 }], videos: [], count: 1, direct: true })
+        return res.json({ images: [{ url, score: 99 }], videos: [], files: [], count: 1, direct: true })
       }
 
       if (contentType.includes('text/html') || contentType.includes('application/xhtml')) {
@@ -59,7 +59,8 @@ export default async function handler(req, res) {
           })
         )
         const published = videos.filter((v) => v.platform !== 'wistia' || v.directUrl || v.embedUrl)
-        return res.json({ images, videos: published, count: images.length })
+        const files = extractFilesFromHtml(html, url)
+        return res.json({ images, videos: published, files, count: images.length })
       }
 
       return res.status(415).json({ error: `Cannot scan content-type: ${contentType}` })
