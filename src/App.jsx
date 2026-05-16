@@ -836,6 +836,23 @@ function FeedbackModal({ onClose }) {
   )
 }
 
+function FeedbackPanel({ onOpen }) {
+  return (
+    <section className="feedback-panel">
+      <div>
+        <p className="eyebrow">Help us improve</p>
+        <h2>Shape the next version</h2>
+        <p>
+          Tell us what felt confusing, what source failed, or which download workflow should feel faster.
+        </p>
+      </div>
+      <button onClick={onOpen} className="secondary-action">
+        Send feedback
+      </button>
+    </section>
+  )
+}
+
 // ─── Language Picker ──────────────────────────────────────────────────────────
 function LanguagePicker({ lang, setLang }) {
   const [open, setOpen] = useState(false)
@@ -851,13 +868,13 @@ function LanguagePicker({ lang, setLang }) {
   return (
     <div ref={ref} className="relative">
       <button onClick={() => setOpen(o => !o)}
-        className="fixed top-4 z-40 flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium border transition-all"
-        style={{ right: '6rem', background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
+        className="utility-pill flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium border transition-all"
+        style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
         🌐 <span className="hidden sm:inline">{LANGUAGES[lang]?.label ?? 'English'}</span>
       </button>
       {open && (
-        <div className="fixed top-12 z-50 rounded-2xl border shadow-xl overflow-hidden"
-          style={{ right: '6rem', width: '13rem', background: 'var(--surface)', borderColor: 'var(--border)' }}>
+        <div className="absolute right-0 top-11 z-50 rounded-2xl border shadow-xl overflow-hidden"
+          style={{ width: '13rem', background: 'var(--surface)', borderColor: 'var(--border)' }}>
           {Object.entries(LANGUAGES).map(([code, { label, flag }]) => (
             <button key={code} onClick={() => { setLang(code); setOpen(false) }}
               className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left transition-colors"
@@ -908,6 +925,10 @@ export default function App() {
     document.documentElement.classList.toggle('dark', dark)
     try { localStorage.setItem('theme', dark ? 'dark' : 'light') } catch {}
   }, [dark])
+
+  useEffect(() => {
+    document.title = 'Download Anything - Idone'
+  }, [])
 
   const [feedbackOpen, setFeedbackOpen] = useState(false)
 
@@ -1142,51 +1163,57 @@ export default function App() {
   return (
     <T.Provider value={t}>
     {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
-    <div className="min-h-screen transition-colors duration-200">
-
-      {/* Top-right action bar: [💬 Feedback] [🌐 Language] [☀ Light] */}
-      <button onClick={() => setFeedbackOpen(true)}
-        className="fixed top-4 z-40 flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium border transition-all"
-        style={{ right: '13.5rem', background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--violet)'; e.currentTarget.style.color = 'var(--violet)' }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-2)' }}>
-        💬 <span className="hidden sm:inline">Feedback</span>
-      </button>
-
-      <LanguagePicker lang={lang} setLang={setLang} />
-
-      {/* Dark mode toggle */}
-      <button onClick={() => setDark(d => !d)}
-        className="fixed top-4 right-4 z-40 flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-all border"
-        style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
-        {dark ? <><Ic.Sun /><span className="hidden sm:inline">Light</span></> : <><Ic.Moon /><span className="hidden sm:inline">Dark</span></>}
-      </button>
+    <div className="app-shell min-h-screen transition-colors duration-200">
 
       {/* Lightbox */}
       {lbIdx !== null && previews.length > 0 && (
         <Lightbox images={previews} startIndex={Math.min(lbIdx, previews.length - 1)} onClose={() => setLbIdx(null)} />
       )}
 
-      {/* Full-width page, content centered */}
-      <div className="min-h-screen px-4 sm:px-8 pt-28 pb-20" style={{ background: 'var(--gradient-bg)' }}>
-        <div className="w-full max-w-[700px] mx-auto">
+      <div className="motion-bg" aria-hidden="true">
+        <span className="beam beam-a" />
+        <span className="beam beam-b" />
+      </div>
+
+      <div className="page-wrap min-h-screen px-4 sm:px-6 lg:px-10 pt-5 pb-16">
+        <nav className="top-nav">
+          <a className="brand-lockup" href="/" aria-label="Idone home">
+            <img src="/favicon.svg" alt="" className="brand-logo" />
+            <span>Idone</span>
+          </a>
+          <div className="top-actions">
+            <button onClick={() => setFeedbackOpen(true)}
+              className="utility-pill flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium border transition-all"
+              style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
+              <span>Feedback</span>
+            </button>
+            <LanguagePicker lang={lang} setLang={setLang} />
+            <button onClick={() => setDark(d => !d)}
+              className="utility-pill flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium transition-all border"
+              style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
+              {dark ? <><Ic.Sun /><span className="hidden sm:inline">Light</span></> : <><Ic.Moon /><span className="hidden sm:inline">Dark</span></>}
+            </button>
+          </div>
+        </nav>
+
+        <main className="hero-grid mx-auto">
+          <section className="main-column">
 
           {/* ── Hero ── */}
-          <header className="mb-10 text-center">
-            <div className="inline-flex flex-col items-center gap-[4px] mb-7" aria-hidden="true">
-              <span className="block w-8 h-[3px] rounded-full" style={{ background: 'var(--gradient-button)' }} />
-              <span className="block w-5 h-[3px] rounded-full opacity-55" style={{ background: 'var(--gradient-button)' }} />
-              <span className="block w-3 h-[3px] rounded-full opacity-25" style={{ background: 'var(--gradient-button)' }} />
+          <header className="hero-copy">
+            <div className="hero-mark" aria-hidden="true">
+              <img src="/favicon.svg" alt="" />
             </div>
-            <h1 className="text-[48px] sm:text-[64px] md:text-[80px] font-bold leading-[1.02] gradient-text" style={{ letterSpacing: 'clamp(-1.5px, -0.03em, -3px)' }}>
+            <p className="eyebrow">Universal media grabber</p>
+            <h1 className="gradient-text">
               Download Anything.
             </h1>
-            <p className="mt-4 text-base sm:text-lg leading-relaxed mx-auto" style={{ color: 'var(--text-2)', maxWidth: '46ch' }}>
+            <p className="hero-subtitle">
               {t('subtitle')}
             </p>
-            <div className="flex flex-wrap justify-center gap-2 mt-5">
+            <div className="feature-chips">
               {['Images', 'Videos', 'PDFs', 'Audio', 'Files'].map(f => (
-                <span key={f} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border"
+                <span key={f} className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-2)', background: 'var(--surface)' }}>
                   {f}
                 </span>
@@ -1195,7 +1222,7 @@ export default function App() {
           </header>
 
           {/* ── Card column ── */}
-          <div className="space-y-3">
+          <div className="tool-stack">
 
           {/* ── Input card ── */}
           <div className="rounded-2xl border overflow-hidden transition-shadow duration-200 input-card" style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
@@ -1573,8 +1600,40 @@ export default function App() {
             {t('footer')}
           </p>
         </div>{/* end card column */}
-      </div>{/* end centered container */}
-      </div>{/* end full-width page */}
+          </section>
+
+          <aside className="side-column">
+            <section className="side-panel spotlight-panel">
+              <p className="eyebrow">Workflow</p>
+              <h2>Paste once. Extract cleanly.</h2>
+              <p>Scan public pages, collect the useful media, preview results, then save everything as a ZIP.</p>
+              <div className="metric-grid">
+                <div><strong>4</strong><span>media types</span></div>
+                <div><strong>ZIP</strong><span>auto-save</span></div>
+                <div><strong>Fast</strong><span>parallel fetch</span></div>
+              </div>
+            </section>
+
+            <FeedbackPanel onOpen={() => setFeedbackOpen(true)} />
+
+            <section className="side-panel settings-panel">
+              <p className="eyebrow">Preferences</p>
+              <div className="settings-row">
+                <span>Language</span>
+                <LanguagePicker lang={lang} setLang={setLang} />
+              </div>
+              <div className="settings-row">
+                <span>Appearance</span>
+                <button onClick={() => setDark(d => !d)}
+                  className="utility-pill flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium transition-all border"
+                  style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
+                  {dark ? <><Ic.Sun /> Light</> : <><Ic.Moon /> Dark</>}
+                </button>
+              </div>
+            </section>
+          </aside>
+        </main>
+      </div>
     </div>
     </T.Provider>
   )
