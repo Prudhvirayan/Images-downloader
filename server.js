@@ -27,6 +27,8 @@ const WP_DIM_RE = /[-_](\d{2,4})[x×](\d{2,4})(?:-\w+)?\.(jpe?g|png|webp|gif)(\?
 const MIN_QUALITY_DIM = 600 // skip thumbnails smaller than this in any dimension
 
 const VIDEO_EXT_RE = /\.(mp4|webm|mov|m4v)(\?[^"']*)?$/i
+const AUDIO_EXT_RE = /\.(mp3|wav|ogg|flac|aac|m4a|opus|wma)(\?[^"']*)?$/i
+const DOC_EXT_RE   = /\.(pdf|epub|docx?|xlsx?|pptx?|zip|rar|7z|tar\.gz?)(\?[^"']*)?$/i
 
 const BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -349,6 +351,34 @@ function extractVideosFromHtml(html, pageUrl) {
   return videos
 }
 
+function extractFilesFromHtml(html, pageUrl) {
+  const $ = cheerioLoad(html)
+  const seen = new Set()
+  const files = []
+  function addFile(raw, category) {
+    const url = resolveUrl(raw, pageUrl)
+    if (!url || seen.has(url) || JUNK_URL_RE.test(url)) return
+    seen.add(url)
+    const name = decodeURIComponent(url.split('/').pop().split('?')[0]) || url
+    const ext  = (name.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase() || ''
+    files.push({ url, name, ext, category })
+  }
+  $('audio').each((_, el) => {
+    const src = $(el).attr('src')
+    if (src && AUDIO_EXT_RE.test(src)) addFile(src, 'audio')
+    $(el).find('source[src]').each((__, s) => {
+      const u = $(s).attr('src')
+      if (u && AUDIO_EXT_RE.test(u)) addFile(u, 'audio')
+    })
+  })
+  $('a[href]').each((_, el) => {
+    const href = $(el).attr('href') || ''
+    if (AUDIO_EXT_RE.test(href)) addFile(href, 'audio')
+    else if (DOC_EXT_RE.test(href)) addFile(href, 'document')
+  })
+  return files
+}
+
 async function resolveWistiaVideo(hash) {
   try {
     const res = await fetch(`https://fast.wistia.com/embed/medias/${hash}.json`, { headers: BROWSER_HEADERS })
@@ -513,7 +543,8 @@ app.get('/api/scan', async (req, res) => {
         })
       )
 
-      return res.json({ images, videos: videos.filter(v => v.platform !== 'wistia' || v.directUrl || v.embedUrl), count: images.length })
+      const files = extractFilesFromHtml(html, url)
+      return res.json({ images, videos: videos.filter(v => v.platform !== 'wistia' || v.directUrl || v.embedUrl), files, count: images.length })
     }
 
     return res.status(415).json({ error: `Cannot scan content-type: ${contentType}` })
