@@ -776,9 +776,8 @@ function LegalDisclaimer() {
   )
 }
 
-// ─── Language Request Modal ───────────────────────────────────────────────────
-function LanguageRequestModal({ onClose }) {
-  const t = useT()
+// ─── Feedback Modal ───────────────────────────────────────────────────────────
+function FeedbackModal({ onClose }) {
   const [state, handleSubmit] = useForm('xykvgyrw')
 
   return (
@@ -791,34 +790,41 @@ function LanguageRequestModal({ onClose }) {
         {state.succeeded ? (
           <div className="text-center space-y-4">
             <p className="text-2xl">🙏</p>
-            <p className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>{t('lang_request_thanks')}</p>
+            <p className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>
+              Thanks for your feedback! We'll use it to make the tool better.
+            </p>
             <button onClick={onClose} className="w-full rounded-xl py-2.5 text-sm font-semibold text-white"
               style={{ background: 'var(--gradient-button)' }}>
-              {t('lang_request_close')}
+              Close
             </button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('lang_request_title')}</p>
-            <input
-              type="text"
-              name="language"
+            <div>
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Help us improve</p>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                Share a bug, a missing feature, or anything we should know.
+              </p>
+            </div>
+            <textarea
+              name="message"
               required
-              placeholder={t('lang_request_ph')}
+              rows={4}
+              placeholder="What's on your mind? Any features missing, something broken, or ideas to improve the tool…"
               autoFocus
-              className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none border"
-              style={{ background: 'var(--bg)', borderColor: 'var(--border-2)', color: 'var(--text-1)' }} />
-            <input type="hidden" name="_subject" value="Language Request — Image & Video Downloader" />
+              className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none border resize-none"
+              style={{ background: 'var(--bg)', borderColor: 'var(--border-2)', color: 'var(--text-1)', lineHeight: '1.5' }} />
+            <input type="hidden" name="_subject" value="Feedback — Image & Video Downloader" />
             <div className="flex gap-2">
               <button type="button" onClick={onClose}
                 className="flex-1 rounded-xl py-2.5 text-sm font-medium border transition-colors"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-2)', background: 'transparent' }}>
-                {t('lang_request_close')}
+                Cancel
               </button>
               <button type="submit" disabled={state.submitting}
                 className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50"
                 style={{ background: 'var(--gradient-button)' }}>
-                {state.submitting ? t('lang_request_sending') : t('lang_request_submit')}
+                {state.submitting ? 'Sending…' : 'Send feedback'}
               </button>
             </div>
           </form>
@@ -830,9 +836,7 @@ function LanguageRequestModal({ onClose }) {
 
 // ─── Language Picker ──────────────────────────────────────────────────────────
 function LanguagePicker({ lang, setLang }) {
-  const t = useT()
   const [open, setOpen] = useState(false)
-  const [requestOpen, setRequestOpen] = useState(false)
   const ref = useRef(null)
 
   useEffect(() => {
@@ -843,42 +847,32 @@ function LanguagePicker({ lang, setLang }) {
   }, [open])
 
   return (
-    <>
-      {requestOpen && <LanguageRequestModal onClose={() => setRequestOpen(false)} />}
-      <div ref={ref} className="relative">
-        <button onClick={() => setOpen(o => !o)}
-          className="fixed top-4 z-40 flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium border transition-all"
-          style={{ right: '6rem', background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
-          🌐 <span className="hidden sm:inline">{LANGUAGES[lang]?.label ?? 'English'}</span>
-        </button>
-        {open && (
-          <div className="fixed top-12 z-50 rounded-2xl border shadow-xl overflow-hidden"
-            style={{ right: '6rem', width: '13rem', background: 'var(--surface)', borderColor: 'var(--border)' }}>
-            {Object.entries(LANGUAGES).map(([code, { label, flag }]) => (
-              <button key={code} onClick={() => { setLang(code); setOpen(false) }}
-                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left transition-colors"
-                style={{
-                  color: code === lang ? 'var(--violet)' : 'var(--text-1)',
-                  fontWeight: code === lang ? 600 : 400,
-                  background: 'transparent',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                <span>{flag}</span> {label}
-                {code === lang && <span className="ml-auto text-[11px]" style={{ color: 'var(--violet)' }}>✓</span>}
-              </button>
-            ))}
-            <div className="border-t px-3.5 py-2.5" style={{ borderColor: 'var(--border)' }}>
-              <button onClick={() => { setOpen(false); setRequestOpen(true) }}
-                className="flex items-center gap-1.5 text-xs hover:underline w-full text-left"
-                style={{ color: 'var(--text-3)' }}>
-                ✉ {t('request_language')}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </>
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(o => !o)}
+        className="fixed top-4 z-40 flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium border transition-all"
+        style={{ right: '6rem', background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
+        🌐 <span className="hidden sm:inline">{LANGUAGES[lang]?.label ?? 'English'}</span>
+      </button>
+      {open && (
+        <div className="fixed top-12 z-50 rounded-2xl border shadow-xl overflow-hidden"
+          style={{ right: '6rem', width: '13rem', background: 'var(--surface)', borderColor: 'var(--border)' }}>
+          {Object.entries(LANGUAGES).map(([code, { label, flag }]) => (
+            <button key={code} onClick={() => { setLang(code); setOpen(false) }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left transition-colors"
+              style={{
+                color: code === lang ? 'var(--violet)' : 'var(--text-1)',
+                fontWeight: code === lang ? 600 : 400,
+                background: 'transparent',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <span>{flag}</span> {label}
+              {code === lang && <span className="ml-auto text-[11px]" style={{ color: 'var(--violet)' }}>✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -912,6 +906,8 @@ export default function App() {
     document.documentElement.classList.toggle('dark', dark)
     try { localStorage.setItem('theme', dark ? 'dark' : 'light') } catch {}
   }, [dark])
+
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
 
   const [lang, setLang] = useState(() => {
     try {
@@ -1124,6 +1120,7 @@ export default function App() {
 
   return (
     <T.Provider value={t}>
+    {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
     <div className="min-h-screen transition-colors duration-200">
 
       {/* Language picker */}
@@ -1531,9 +1528,18 @@ export default function App() {
 
           <LegalDisclaimer />
 
-          <p className="mt-4 text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {t('footer')}
-          </p>
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <p className="text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
+              {t('footer')}
+            </p>
+            <button onClick={() => setFeedbackOpen(true)}
+              className="text-[11px] px-3 py-1 rounded-full border transition-colors hover:border-violet-400"
+              style={{ color: 'var(--text-3)', borderColor: 'var(--border)' }}
+              onMouseEnter={e => e.currentTarget.style.color = 'var(--violet)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
+              💬 Help us improve
+            </button>
+          </div>
         </div>
       </div>
     </div>
