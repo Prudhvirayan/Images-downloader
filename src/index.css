@@ -4,27 +4,27 @@
 
 @layer base {
   :root {
-    --bg:        #f7f6f2;
-    --surface:   rgba(255, 255, 255, 0.86);
+    --bg:        #f4f3ef;
+    --surface:   rgba(255, 255, 255, 0.92);
     --surface-strong: #ffffff;
-    --border:    rgba(31, 29, 24, 0.12);
-    --border-2:  rgba(31, 29, 24, 0.22);
-    --text-1:    #15130f;
-    --text-2:    #514d45;
-    --text-3:    #807a6f;
+    --border:    rgba(20, 18, 12, 0.10);
+    --border-2:  rgba(20, 18, 12, 0.20);
+    --text-1:    #0e0c08;
+    --text-2:    #3d3a33;
+    --text-3:    #706b5f;
     --violet:    #6d28d9;
     --violet-2:  #4f46e5;
     --cyan:      #0891b2;
-    --violet-bg: rgba(109, 40, 217, 0.08);
-    --violet-border: rgba(109, 40, 217, 0.22);
-    --shadow-card:         0 22px 70px rgba(23,20,16,0.12), 0 2px 12px rgba(23,20,16,0.08), inset 0 1px rgba(255,255,255,0.8);
+    --violet-bg: rgba(109, 40, 217, 0.07);
+    --violet-border: rgba(109, 40, 217, 0.20);
+    --shadow-card:         0 2px 6px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.07), inset 0 1px rgba(255,255,255,0.9);
     --gradient-button:     linear-gradient(135deg, #7c3aed 0%, #4f46e5 62%, #0891b2 125%);
-    --gradient-btn-shadow: 0 12px 28px rgba(109,40,217,0.26), 0 2px 8px rgba(0,0,0,0.10);
-    --gradient-bg:         linear-gradient(180deg, #fbfaf8 0%, #f7f6f2 48%, #f3f1eb 100%);
-    --gradient-text:       linear-gradient(135deg, #17130f 0%, #4c1d95 48%, #7c3aed 100%);
-    --glow-color:          rgba(109, 40, 217, 0.16);
-    --beam-a:              rgba(124, 58, 237, 0.28);
-    --beam-b:              rgba(8, 145, 178, 0.18);
+    --gradient-btn-shadow: 0 8px 22px rgba(109,40,217,0.30), 0 2px 6px rgba(0,0,0,0.12);
+    --gradient-bg:         linear-gradient(160deg, #f8f7f4 0%, #f4f3ef 55%, #edeae2 100%);
+    --gradient-text:       linear-gradient(135deg, #6d28d9 0%, #4f46e5 50%, #0891b2 100%);
+    --glow-color:          rgba(109, 40, 217, 0.10);
+    --beam-a:              rgba(124, 58, 237, 0.18);
+    --beam-b:              rgba(8, 145, 178, 0.12);
   }
 
   .dark {

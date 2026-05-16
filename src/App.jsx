@@ -113,6 +113,36 @@ const Ic = {
       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
     </svg>
   ),
+  Shield: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </svg>
+  ),
+  Lock: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+    </svg>
+  ),
+  Zap: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+    </svg>
+  ),
+  Monitor: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+    </svg>
+  ),
+  Link: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+    </svg>
+  ),
+  Save: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+    </svg>
+  ),
 }
 
 // ─── Lightbox ─────────────────────────────────────────────────────────────────
@@ -626,24 +656,24 @@ function UrlActionBtn({ template, onPaste, disabled }) {
   if (template) {
     return (
       <button onClick={handleCopy} disabled={disabled}
-        className="flex items-center gap-1.5 px-3 border-l text-xs font-medium flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        style={btnStyle}
+        title={copied ? 'Copied!' : t('btn_copy')}
+        className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        style={{ color: copied ? '#10b981' : 'var(--text-3)' }}
         onMouseEnter={e => { if (!copied) e.currentTarget.style.color = 'var(--violet)' }}
-        onMouseLeave={e => { if (!copied) e.currentTarget.style.color = 'var(--text-2)' }}>
+        onMouseLeave={e => { if (!copied) e.currentTarget.style.color = 'var(--text-3)' }}>
         {copied ? <Ic.Check /> : <Ic.Copy />}
-        <span className="hidden sm:inline">{copied ? '✓' : t('btn_copy')}</span>
       </button>
     )
   }
 
   return (
     <button onClick={onPaste} disabled={disabled}
-      className="flex items-center gap-1.5 px-3 border-l text-xs font-medium flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-      style={btnStyle}
+      title={t('btn_paste')}
+      className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      style={{ color: 'var(--text-3)' }}
       onMouseEnter={e => e.currentTarget.style.color = 'var(--violet)'}
-      onMouseLeave={e => e.currentTarget.style.color = 'var(--text-2)'}>
+      onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
       <Ic.Clipboard />
-      <span className="hidden sm:inline">{t('btn_paste')}</span>
     </button>
   )
 }
@@ -1196,16 +1226,25 @@ export default function App() {
           </div>
         </nav>
 
-        <main className="mx-auto w-full max-w-[640px] pt-[clamp(36px,6vh,72px)] pb-10 px-2">
+        <main className="mx-auto w-full max-w-[860px] pt-[clamp(28px,5vh,60px)] pb-12 px-4">
 
           {/* ── Hero ── */}
-          <header className="text-center mb-8">
-            <h1 className="gradient-text font-bold leading-[1.05] mb-3"
-              style={{ fontSize: 'clamp(36px, 5.5vw, 56px)', letterSpacing: '-0.03em' }}>
-              Download Anything.
+          <header className="text-center mb-10">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border mb-6"
+              style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)', fontSize: '12px', fontWeight: 600, backdropFilter: 'blur(12px)', boxShadow: 'var(--shadow-card)' }}>
+              <span style={{ color: 'var(--violet)' }}>✦</span>
+              <span>Fast. Private. No Limits.</span>
+            </div>
+
+            <h1 className="font-bold leading-[1.04] mb-5"
+              style={{ fontSize: 'clamp(44px, 8vw, 84px)', letterSpacing: '-0.03em', color: 'var(--text-1)' }}>
+              Download <span className="gradient-text">anything</span><br />
+              from the web.
             </h1>
-            <p style={{ color: 'var(--text-2)', fontSize: '15px', lineHeight: '1.5' }}>
-              {t('subtitle')}
+
+            <p className="mx-auto" style={{ color: 'var(--text-2)', fontSize: 'clamp(15px,1.5vw,17px)', lineHeight: '1.6', maxWidth: '580px' }}>
+              Images, videos, PDFs, audio, files & full pages — from any public URL.
             </p>
           </header>
 
@@ -1213,16 +1252,17 @@ export default function App() {
           <div className="space-y-3">
 
               {/* URL input row — no card wrapper, floats on the page */}
-              <div className="flex rounded-2xl border overflow-hidden transition-all duration-150 input-inner"
-                style={{ borderColor: parseError ? '#f43f5e' : 'var(--border-2)', background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
+              <div className="flex items-center rounded-2xl border transition-all duration-150 input-inner px-4 gap-2.5"
+                style={{ minHeight: '58px', borderColor: parseError ? '#f43f5e' : 'var(--border-2)', background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
+                  <span className="flex-shrink-0" style={{ color: 'var(--text-3)' }}><Ic.Link /></span>
                   <input
                     type="text"
                     value={template}
                     onChange={e => onInput(e.target.value)}
                     placeholder={t('url_placeholder')}
                     disabled={isBusy || phase === 'scanning'}
-                    className="flex-1 px-3.5 py-2.5 text-sm bg-transparent outline-none min-w-0 disabled:opacity-50"
-                    style={{ color: 'var(--text-1)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '13px' }}
+                    className="flex-1 py-3.5 bg-transparent outline-none min-w-0 disabled:opacity-50"
+                    style={{ color: 'var(--text-1)', fontSize: '15px' }}
                     onKeyDown={e => {
                       // Enter → trigger primary action
                       if (e.key === 'Enter') {
@@ -1507,41 +1547,28 @@ export default function App() {
                 </div>
               </div>}
 
-              {/* Divider */}
-              <div className="border-t" style={{ borderColor: 'var(--border)' }} />
-
-              {/* Hint — always visible, detail behind tooltip */}
-              <div className="flex items-center gap-1.5">
-                <Tooltip content={
-                  <div className="space-y-1.5">
-                    <p><span className="font-medium" style={{ color: 'var(--text-1)' }}>{t('hint_series')}</span> {t('hint_series_detail')}</p>
-                    <p><span className="font-medium" style={{ color: 'var(--text-1)' }}>{t('hint_scan')}</span> {t('hint_scan_detail')}</p>
-                    <p><span className="font-medium" style={{ color: 'var(--text-1)' }}>{t('hint_wistia')}</span> {t('hint_wistia_detail')}</p>
-                  </div>
-                }>
-                  <span className="inline-flex items-center gap-1 text-[11px] select-none" style={{ color: 'var(--text-3)' }}>
-                    <span className="text-[13px] leading-none">ⓘ</span>
-                    <span>{t('hint_row')}</span>
-                  </span>
-                </Tooltip>
-              </div>
-
               {/* Auto-save toggle */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{t('autosave_label')}</p>
-                  <Tooltip content={t('autosave_tooltip')}>
-                    <span className="text-[13px] leading-none select-none" style={{ color: 'var(--text-3)' }}>ⓘ</span>
-                  </Tooltip>
+              <div className="flex items-center justify-between px-1 py-1">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex-shrink-0" style={{ color: 'var(--violet)' }}><Ic.Save /></span>
+                  <div>
+                    <p className="text-sm font-semibold leading-tight" style={{ color: 'var(--text-1)' }}>{t('autosave_label')}</p>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>Save downloads as ZIP automatically</p>
+                      <Tooltip content={t('autosave_tooltip')}>
+                        <span className="text-[12px] leading-none select-none cursor-default" style={{ color: 'var(--text-3)' }}>ⓘ</span>
+                      </Tooltip>
+                    </div>
+                  </div>
                 </div>
                 <button
                   onClick={() => setAutoSave(a => !a)}
                   title={autoSave ? 'Auto-save on' : 'Auto-save off'}
-                  className="flex-shrink-0 w-9 h-5 rounded-full relative transition-colors duration-200 ml-4"
+                  className="flex-shrink-0 w-10 h-[22px] rounded-full relative transition-colors duration-200 ml-4"
                   style={{ background: autoSave ? 'var(--violet)' : 'var(--border-2)' }}>
                   <span
-                    className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200"
-                    style={{ left: '2px', transform: autoSave ? 'translateX(16px)' : 'translateX(0)' }} />
+                    className="absolute top-[3px] w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200"
+                    style={{ left: '3px', transform: autoSave ? 'translateX(18px)' : 'translateX(0)' }} />
                 </button>
               </div>
             </div>
@@ -1574,8 +1601,57 @@ export default function App() {
             </div>
           )}
 
-          {/* Footer: compact legal + attribution */}
-          <div className="mt-6 space-y-3">
+          {/* ── Feature strip ── */}
+          <div className="flex flex-wrap justify-center sm:justify-between gap-x-8 gap-y-5 mt-12 px-16">
+            {[
+              { Icon: Ic.Shield,  label: '100% Safe',     sub: 'No malware. No risks.',    color: '#10b981' },
+              { Icon: Ic.Lock,    label: 'Private',        sub: "We don't store anything.", color: 'var(--violet)' },
+              { Icon: Ic.Zap,     label: 'Blazing Fast',   sub: 'Downloads in seconds.',    color: '#5b8ef7' },
+            ].map(({ Icon, label, sub, color }) => (
+              <div key={label} className="flex items-center gap-3">
+                <span className="flex-shrink-0" style={{ color }}><Icon /></span>
+                <div>
+                  <p className="text-sm font-semibold leading-tight" style={{ color: 'var(--text-1)' }}>{label}</p>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* ── How it works ── */}
+          <div className="mt-10">
+            <h2 className="text-center font-semibold mb-6" style={{ fontSize: '16px', color: 'var(--text-1)' }}>
+              How it works
+            </h2>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { Icon: Ic.Link,     title: 'Paste URL',  desc: 'Paste the link of any public page you want to download.' },
+                { Icon: Ic.Scan,     title: 'We scan it', desc: 'We scan the content and find all available downloadable files.' },
+                { Icon: Ic.Download, title: 'Download',   desc: 'Preview and download everything instantly as a ZIP file.' },
+              ].map(({ Icon, title, desc }, i) => (
+                <div key={title} className="relative flex gap-3 p-4 rounded-2xl border"
+                  style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
+                  {i < 2 && (
+                    <span className="hidden sm:block absolute -right-4 top-1/2 -translate-y-1/2 text-[10px] font-medium z-10 select-none"
+                      style={{ color: 'var(--text-3)', letterSpacing: '1px' }}>···→</span>
+                  )}
+                  {/* Icon box */}
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 self-start"
+                    style={{ background: 'var(--violet-bg)', border: '1px solid var(--violet-border)', color: 'var(--violet)' }}>
+                    <Icon />
+                  </div>
+                  {/* Title + description */}
+                  <div>
+                    <p className="text-[13px] font-semibold leading-tight mb-1" style={{ color: 'var(--text-1)' }}>{title}</p>
+                    <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Footer ── */}
+          <div className="mt-10 space-y-3">
             <LegalDisclaimer />
             <p className="text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
               {t('footer')}
