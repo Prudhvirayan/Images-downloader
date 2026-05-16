@@ -15,11 +15,12 @@
     --violet-2:  #6D28D9;
     --violet-bg: #F5F0FF;
     --violet-border: #DDD6FE;
-    --shadow-card:         0 2px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.04);
+    --shadow-card:         0 4px 24px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06);
     --gradient-button:     linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
     --gradient-btn-shadow: 0 2px 12px rgba(124,58,237,0.30), 0 1px 3px rgba(0,0,0,0.10);
-    --gradient-bg:         radial-gradient(ellipse 80% 50% at 50% 0%, rgba(124,58,237,0.04) 0%, var(--bg) 60%);
+    --gradient-bg:         radial-gradient(ellipse 90% 55% at 50% -5%, rgba(124,58,237,0.10) 0%, var(--bg) 58%);
     --gradient-text:       linear-gradient(135deg, var(--text-1) 0%, var(--violet) 110%);
+    --glow-color:          rgba(124, 58, 237, 0.09);
   }
 
   .dark {
@@ -34,14 +35,16 @@
     --violet-2:  #8B5CF6;
     --violet-bg: #1A1525;
     --violet-border: #2D2040;
-    --shadow-card:         0 2px 12px rgba(0,0,0,0.22), 0 1px 3px rgba(0,0,0,0.14);
+    --shadow-card:         0 4px 24px rgba(0,0,0,0.30), 0 1px 4px rgba(0,0,0,0.18);
     --gradient-button:     linear-gradient(135deg, #9B72F5 0%, #8B5CF6 100%);
     --gradient-btn-shadow: 0 2px 12px rgba(155,114,245,0.28), 0 1px 3px rgba(0,0,0,0.20);
-    --gradient-bg:         radial-gradient(ellipse 80% 50% at 50% 0%, rgba(124,58,237,0.09) 0%, var(--bg) 60%);
+    --gradient-bg:         radial-gradient(ellipse 90% 55% at 50% -5%, rgba(124,58,237,0.22) 0%, var(--bg) 58%);
     --gradient-text:       linear-gradient(135deg, var(--text-1) 0%, var(--violet) 110%);
+    --glow-color:          rgba(124, 58, 237, 0.20);
   }
 
   body {
+    position: relative;
     background-color: var(--bg);
     color: var(--text-1);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -49,6 +52,23 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  /* Cursor-following glow — position driven by --glow-x/--glow-y set in JS */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background: radial-gradient(
+      800px circle at var(--glow-x, 50%) var(--glow-y, 25%),
+      var(--glow-color),
+      transparent 70%
+    );
+  }
+
+  /* All page content must sit above the glow layer */
+  #root { position: relative; z-index: 1; }
 }
 
 @layer utilities {

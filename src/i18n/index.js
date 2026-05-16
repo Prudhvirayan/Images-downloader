@@ -3,7 +3,7 @@
 // Vars: { n: 5 } replaces {n} in the string.
 
 const en = {
-  subtitle:             'Download images, videos, PDFs, and audio from any public page. Paste a URL to get started.',
+  subtitle:             'Images · Videos · PDFs · Audio · Files — from any public page.',
   url_placeholder:      'Paste a URL — image, video, PDF, or any page',
   btn_paste:            'Paste',
   btn_copy:             'Copy',
