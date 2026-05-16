@@ -45,7 +45,7 @@
     --gradient-button:     linear-gradient(135deg, #a78bfa 0%, #7c3aed 55%, #22d3ee 130%);
     --gradient-btn-shadow: 0 16px 38px rgba(124,58,237,0.36), 0 2px 12px rgba(0,0,0,0.28);
     --gradient-bg:         radial-gradient(ellipse 90% 64% at 50% -12%, rgba(124,58,237,0.20) 0%, transparent 60%), linear-gradient(180deg, #0d0718 0%, #09090d 44%, #060608 100%);
-    --gradient-text:       linear-gradient(135deg, #ffffff 0%, #d8ccff 38%, #a78bfa 100%);
+    --gradient-text:       linear-gradient(135deg, #c4b5fd 0%, #a78bfa 45%, #38bdf8 100%);
     --glow-color:          rgba(167, 139, 250, 0.20);
     --beam-a:              rgba(124, 58, 237, 0.38);
     --beam-b:              rgba(34, 211, 238, 0.18);
@@ -98,7 +98,22 @@
   }
 
   .input-inner:focus-within {
-    border-color: rgba(124,58,237,0.35) !important;
+    border-color: rgba(124,58,237,0.55) !important;
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.14), 0 0 0 6px rgba(8,145,178,0.06), var(--shadow-card) !important;
+  }
+
+  .dark .input-inner:focus-within {
+    border-color: rgba(167,139,250,0.60) !important;
+    box-shadow: 0 0 0 3px rgba(167,139,250,0.18), 0 0 0 6px rgba(56,189,248,0.08), var(--shadow-card) !important;
+  }
+
+  @keyframes ph-enter {
+    from { transform: translateY(calc(-50% + 14px)); opacity: 0;   }
+    to   { transform: translateY(-50%);              opacity: 0.5; }
+  }
+  @keyframes ph-exit {
+    from { transform: translateY(-50%);              opacity: 0.5; }
+    to   { transform: translateY(calc(-50% - 14px)); opacity: 0;   }
   }
 
   .scrollbar-thin { scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; }

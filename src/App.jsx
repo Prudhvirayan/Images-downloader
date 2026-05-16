@@ -755,17 +755,24 @@ function LegalDisclaimer() {
   const t = useT()
   const [open, setOpen] = useState(false)
   return (
-    <div className="mt-6 rounded-2xl border overflow-hidden text-[11px]" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+    <div className="rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)', background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
       <button onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left transition-colors"
+        className="w-full flex items-center justify-between px-5 py-4 text-left transition-colors"
         style={{ color: 'var(--text-2)' }}
         onMouseEnter={e => e.currentTarget.style.color = 'var(--text-1)'}
         onMouseLeave={e => e.currentTarget.style.color = 'var(--text-2)'}>
-        <span className="font-medium text-[11px] tracking-wider uppercase">{t('legal_header')}</span>
-        <span className="text-base leading-none" style={{ transform: open ? 'rotate(180deg)' : 'none', display: 'inline-block', transition: 'transform 0.2s' }}>⌄</span>
+        <div className="flex items-center gap-2.5">
+          <span style={{ color: 'var(--violet)', opacity: 0.7 }}><Ic.Lock /></span>
+          <span className="font-semibold text-[13px] tracking-wide">{t('legal_header')}</span>
+        </div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          className="w-4 h-4 flex-shrink-0 transition-transform duration-200"
+          style={{ transform: open ? 'rotate(180deg)' : 'none' }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
       </button>
       {open && (
-        <div className="px-4 pb-5 space-y-3 leading-relaxed border-t" style={{ borderColor: 'var(--border)', color: 'var(--text-2)' }}>
+        <div className="px-5 pb-5 space-y-3 leading-relaxed border-t text-[12px]" style={{ borderColor: 'var(--border)', color: 'var(--text-2)' }}>
           <div className="pt-3 text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-3)' }}>Last updated: May 2026</div>
 
           <section>
@@ -811,17 +818,21 @@ function LegalDisclaimer() {
 // ─── Feedback Modal ───────────────────────────────────────────────────────────
 function FeedbackModal({ onClose }) {
   const [state, handleSubmit] = useForm('xykvgyrw')
+  const [msg, setMsg] = useState('')
+  const MAX = 1000
+  const remaining = MAX - msg.length
+  const showCount = remaining <= 50
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center px-4"
-      style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
       onClick={onClose}>
-      <div className="rounded-2xl border shadow-2xl p-6 w-full max-w-sm"
-        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+      <div className="rounded-2xl border shadow-2xl p-7 w-full max-w-lg"
+        style={{ background: 'var(--surface-strong)', borderColor: 'var(--border)' }}
         onClick={e => e.stopPropagation()}>
         {state.succeeded ? (
-          <div className="text-center space-y-4">
-            <p className="text-2xl">🙏</p>
+          <div className="text-center space-y-4 py-4">
+            <p className="text-3xl">🙏</p>
             <p className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>
               Thanks for your feedback! We'll use it to make the tool better.
             </p>
@@ -831,30 +842,46 @@ function FeedbackModal({ onClose }) {
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Help us improve</p>
-              <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+              <p className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>Help us improve</p>
+              <p className="text-[13px] mt-1 leading-relaxed" style={{ color: 'var(--text-3)' }}>
                 Share a bug, a missing feature, or anything we should know.
               </p>
             </div>
-            <textarea
-              name="message"
-              required
-              rows={4}
-              placeholder="What's on your mind? Any features missing, something broken, or ideas to improve the tool…"
-              autoFocus
-              className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none border resize-none"
-              style={{ background: 'var(--bg)', borderColor: 'var(--border-2)', color: 'var(--text-1)', lineHeight: '1.5' }} />
+
+            <div className="relative">
+              <textarea
+                name="message"
+                required
+                rows={5}
+                value={msg}
+                onChange={e => setMsg(e.target.value.slice(0, MAX))}
+                placeholder="What's on your mind? Any features missing, something broken, or ideas to improve..."
+                autoFocus
+                className="w-full rounded-xl px-4 py-3 text-sm outline-none border resize-none"
+                style={{ background: 'var(--bg)', borderColor: 'var(--border-2)', color: 'var(--text-1)', lineHeight: '1.6' }} />
+              {showCount && (
+                <span className="absolute bottom-3 right-3.5 text-[11px] tabular-nums pointer-events-none"
+                  style={{ color: remaining <= 20 ? '#f43f5e' : 'var(--text-3)' }}>
+                  {remaining}
+                </span>
+              )}
+            </div>
+
             <input type="hidden" name="_subject" value="Feedback — Download Anything" />
-            <div className="flex gap-2">
+
+            <div className="flex gap-3">
               <button type="button" onClick={onClose}
                 className="flex-1 rounded-xl py-2.5 text-sm font-medium border transition-colors"
-                style={{ borderColor: 'var(--border)', color: 'var(--text-2)', background: 'transparent' }}>
+                style={{ borderColor: 'var(--border)', color: 'var(--text-2)', background: 'transparent' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border-2)'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
                 Cancel
               </button>
-              <button type="submit" disabled={state.submitting}
-                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              <button type="submit"
+                disabled={state.submitting || msg.trim().length === 0}
+                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ background: 'var(--gradient-button)' }}>
                 {state.submitting ? 'Sending…' : 'Send feedback'}
               </button>
@@ -1017,6 +1044,31 @@ export default function App() {
   const [done, setDone]             = useState(0)
   const [zipPct, setZipPct]         = useState(null)
   const [lbIdx, setLbIdx]           = useState(null)
+  const phCurRef            = useRef(0)
+  const [phCur, setPhCur]   = useState(0)
+  const [phPrev, setPhPrev] = useState(null)
+
+  const PLACEHOLDERS = [
+    t('url_placeholder'),
+    'Ex: https://example.com/frame[001-120].jpg',
+    'Ex: https://site.com/chapter[1-50].pdf',
+  ]
+  useEffect(() => {
+    if (template) { setPhPrev(null); return }
+    let t1
+    const id = setInterval(() => {
+      // Phase 1: exit current text (show exit animation only)
+      setPhPrev(phCurRef.current)
+      // Phase 2: after exit completes, swap index and play enter animation
+      t1 = setTimeout(() => {
+        const next = (phCurRef.current + 1) % 3
+        phCurRef.current = next
+        setPhCur(next)    // new text index
+        setPhPrev(null)   // clear prev → triggers enter animation for new text
+      }, 320) // matches ph-exit duration (0.3s) + small buffer
+    }, 3800)
+    return () => { clearInterval(id); clearTimeout(t1) }
+  }, [template])
 
   const abortRef   = useRef(null)
   const objUrlsRef = useRef([])
@@ -1230,20 +1282,20 @@ export default function App() {
 
           {/* ── Hero ── */}
           <header className="text-center mb-10">
-            {/* Badge */}
-            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border mb-6"
-              style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)', fontSize: '12px', fontWeight: 600, backdropFilter: 'blur(12px)', boxShadow: 'var(--shadow-card)' }}>
-              <span style={{ color: 'var(--violet)' }}>✦</span>
+            {/* Badge — decorative label, not interactive */}
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full mb-6 select-none"
+              style={{ background: 'var(--violet-bg)', color: 'var(--violet)', fontSize: '12px', fontWeight: 600 }}>
+              <span>✦</span>
               <span>Fast. Private. No Limits.</span>
             </div>
 
             <h1 className="font-bold leading-[1.04] mb-5"
-              style={{ fontSize: 'clamp(44px, 8vw, 84px)', letterSpacing: '-0.03em', color: 'var(--text-1)' }}>
+              style={{ fontSize: 'clamp(44px, 8vw, 72px)', letterSpacing: '-0.02em', color: 'var(--text-1)' }}>
               Download <span className="gradient-text">anything</span><br />
               from the web.
             </h1>
 
-            <p className="mx-auto" style={{ color: 'var(--text-2)', fontSize: 'clamp(15px,1.5vw,17px)', lineHeight: '1.6', maxWidth: '580px' }}>
+            <p className="mx-auto" style={{ color: 'var(--text-2)', fontSize: 'clamp(15px,1.5vw,16px)', lineHeight: '1.6', maxWidth: '580px' }}>
               Images, videos, PDFs, audio, files & full pages — from any public URL.
             </p>
           </header>
@@ -1255,13 +1307,32 @@ export default function App() {
               <div className="flex items-center rounded-2xl border transition-all duration-150 input-inner px-4 gap-2.5"
                 style={{ minHeight: '58px', borderColor: parseError ? '#f43f5e' : 'var(--border-2)', background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
                   <span className="flex-shrink-0" style={{ color: 'var(--text-3)' }}><Ic.Link /></span>
+                  {/* Animated placeholder overlay + input wrapper */}
+                  <div className="flex-1 relative overflow-hidden" style={{ minHeight: '46px', display: 'flex', alignItems: 'center' }}>
+                  {!template && (
+                    phPrev !== null
+                      /* EXIT phase: only old text visible, sliding up */
+                      ? <span key={`exit-${phPrev}`} aria-hidden="true"
+                          className="absolute left-0 top-1/2 whitespace-nowrap pointer-events-none select-none"
+                          style={{ color: 'var(--text-3)', fontSize: '15px',
+                                   animation: 'ph-exit 0.3s cubic-bezier(0.4,0,1,1) forwards' }}>
+                          {PLACEHOLDERS[phPrev]}
+                        </span>
+                      /* ENTER/IDLE phase: only new text visible, sliding in from below */
+                      : <span key={phCur} aria-hidden="true"
+                          className="absolute left-0 top-1/2 whitespace-nowrap pointer-events-none select-none"
+                          style={{ color: 'var(--text-3)', fontSize: '15px',
+                                   animation: 'ph-enter 0.4s cubic-bezier(0.16,1,0.3,1) forwards' }}>
+                          {PLACEHOLDERS[phCur]}
+                        </span>
+                  )}
                   <input
                     type="text"
                     value={template}
                     onChange={e => onInput(e.target.value)}
-                    placeholder={t('url_placeholder')}
+                    placeholder=""
                     disabled={isBusy || phase === 'scanning'}
-                    className="flex-1 py-3.5 bg-transparent outline-none min-w-0 disabled:opacity-50"
+                    className="w-full py-3.5 bg-transparent outline-none disabled:opacity-50"
                     style={{ color: 'var(--text-1)', fontSize: '15px' }}
                     onKeyDown={e => {
                       // Enter → trigger primary action
@@ -1304,6 +1375,7 @@ export default function App() {
                       }
                     }}
                   />
+                  </div>{/* end animated placeholder wrapper */}
                   {template && !isBusy && phase !== 'scanning' && (
                     <button
                       onClick={() => onInput('')}
@@ -1547,29 +1619,22 @@ export default function App() {
                 </div>
               </div>}
 
-              {/* Auto-save toggle */}
-              <div className="flex items-center justify-between px-1 py-1">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex-shrink-0" style={{ color: 'var(--violet)' }}><Ic.Save /></span>
-                  <div>
-                    <p className="text-sm font-semibold leading-tight" style={{ color: 'var(--text-1)' }}>{t('autosave_label')}</p>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>Save downloads as ZIP automatically</p>
-                      <Tooltip content={t('autosave_tooltip')}>
-                        <span className="text-[12px] leading-none select-none cursor-default" style={{ color: 'var(--text-3)' }}>ⓘ</span>
-                      </Tooltip>
-                    </div>
-                  </div>
-                </div>
+              {/* Auto-save toggle — toggle first (proximity), single line */}
+              <div className="flex items-center gap-3 px-1 py-2">
                 <button
                   onClick={() => setAutoSave(a => !a)}
                   title={autoSave ? 'Auto-save on' : 'Auto-save off'}
-                  className="flex-shrink-0 w-10 h-[22px] rounded-full relative transition-colors duration-200 ml-4"
+                  className="flex-shrink-0 w-10 h-[22px] rounded-full relative transition-colors duration-200"
                   style={{ background: autoSave ? 'var(--violet)' : 'var(--border-2)' }}>
                   <span
                     className="absolute top-[3px] w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200"
                     style={{ left: '3px', transform: autoSave ? 'translateX(18px)' : 'translateX(0)' }} />
                 </button>
+                {/* <span className="flex-shrink-0" style={{ color: 'var(--violet)' }}><Ic.Save /></span> */}
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Auto create and save ZIP</p>
+                <Tooltip content={t('autosave_tooltip')}>
+                  <span className="text-[13px] leading-none select-none cursor-default" style={{ color: 'var(--text-3)' }}>ⓘ</span>
+                </Tooltip>
               </div>
             </div>
 
@@ -1602,45 +1667,44 @@ export default function App() {
           )}
 
           {/* ── Feature strip ── */}
-          <div className="flex flex-wrap justify-center sm:justify-between gap-x-8 gap-y-5 mt-12 px-16">
+          <div className="flex items-center justify-center gap-8 mt-16">
             {[
-              { Icon: Ic.Shield,  label: '100% Safe',     sub: 'No malware. No risks.',    color: '#10b981' },
-              { Icon: Ic.Lock,    label: 'Private',        sub: "We don't store anything.", color: 'var(--violet)' },
-              { Icon: Ic.Zap,     label: 'Blazing Fast',   sub: 'Downloads in seconds.',    color: '#5b8ef7' },
-            ].map(({ Icon, label, sub, color }) => (
+              { Icon: Ic.Shield, label: '100% Safe',   sub: 'No malware. No risks.',    color: '#10b981', bg: 'rgba(16,185,129,0.10)' },
+              { Icon: Ic.Lock,   label: 'Private',      sub: "We don't store anything.", color: 'var(--violet)', bg: 'var(--violet-bg)' },
+              { Icon: Ic.Zap,    label: 'Blazing Fast', sub: 'Downloads in seconds.',    color: '#5b8ef7', bg: 'rgba(91,142,247,0.10)' },
+            ].flatMap(({ Icon, label, sub, color, bg }, i) => [
+              i > 0 && <div key={`sep-${i}`} className="hidden sm:block w-px self-stretch mx-6 my-1" style={{ background: 'var(--border)' }} />,
               <div key={label} className="flex items-center gap-3">
-                <span className="flex-shrink-0" style={{ color }}><Icon /></span>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: bg }}>
+                  <span style={{ color }}><Icon /></span>
+                </div>
                 <div>
                   <p className="text-sm font-semibold leading-tight" style={{ color: 'var(--text-1)' }}>{label}</p>
                   <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>
                 </div>
-              </div>
-            ))}
+              </div>,
+            ])}
           </div>
 
           {/* ── How it works ── */}
-          <div className="mt-10">
-            <h2 className="text-center font-semibold mb-6" style={{ fontSize: '16px', color: 'var(--text-1)' }}>
+          <div className="mt-14">
+            <h2 className="text-center font-semibold mb-7" style={{ fontSize: '16px', color: 'var(--text-1)' }}>
               How it works
             </h2>
             <div className="grid grid-cols-3 gap-3">
               {[
-                { Icon: Ic.Link,     title: 'Paste URL',  desc: 'Paste the link of any public page you want to download.' },
-                { Icon: Ic.Scan,     title: 'We scan it', desc: 'We scan the content and find all available downloadable files.' },
-                { Icon: Ic.Download, title: 'Download',   desc: 'Preview and download everything instantly as a ZIP file.' },
-              ].map(({ Icon, title, desc }, i) => (
-                <div key={title} className="relative flex gap-3 p-4 rounded-2xl border"
-                  style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
+                { Icon: Ic.Link,     title: 'Paste URL',  desc: 'Paste the link of any public page you want to download.',        color: 'var(--violet)', border: 'var(--violet-border)' },
+                { Icon: Ic.Scan,     title: 'We scan it', desc: 'We scan the content and find all available downloadable files.', color: '#3b82f6',       border: 'rgba(59,130,246,0.25)' },
+                { Icon: Ic.Download, title: 'Download',   desc: 'Preview and download everything instantly as a ZIP file.',       color: '#10b981',       border: 'rgba(16,185,129,0.25)' },
+              ].map(({ Icon, title, desc, color, border }, i) => (
+                <div key={title} className="relative flex items-center gap-3 p-4 rounded-2xl border"
+                  style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)', borderTop: `2px solid ${border}` }}>
                   {i < 2 && (
                     <span className="hidden sm:block absolute -right-4 top-1/2 -translate-y-1/2 text-[10px] font-medium z-10 select-none"
                       style={{ color: 'var(--text-3)', letterSpacing: '1px' }}>···→</span>
                   )}
-                  {/* Icon box */}
-                  <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 self-start"
-                    style={{ background: 'var(--violet-bg)', border: '1px solid var(--violet-border)', color: 'var(--violet)' }}>
-                    <Icon />
-                  </div>
-                  {/* Title + description */}
+                  <span className="flex-shrink-0" style={{ color }}><Icon /></span>
                   <div>
                     <p className="text-[13px] font-semibold leading-tight mb-1" style={{ color: 'var(--text-1)' }}>{title}</p>
                     <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{desc}</p>
@@ -1651,7 +1715,7 @@ export default function App() {
           </div>
 
           {/* ── Footer ── */}
-          <div className="mt-10 space-y-3">
+          <div className="mt-12 space-y-4">
             <LegalDisclaimer />
             <p className="text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
               {t('footer')}
