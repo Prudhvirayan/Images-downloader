@@ -1196,43 +1196,25 @@ export default function App() {
           </div>
         </nav>
 
-        <main className="hero-grid mx-auto">
-          <section className="main-column">
+        <main className="mx-auto w-full max-w-[640px] pt-[clamp(36px,6vh,72px)] pb-10 px-2">
 
           {/* ── Hero ── */}
-          <header className="hero-copy">
-            <div className="hero-mark" aria-hidden="true">
-              <img src="/favicon.svg" alt="" />
-            </div>
-            <p className="eyebrow">Universal media grabber</p>
-            <h1 className="gradient-text">
+          <header className="text-center mb-8">
+            <h1 className="gradient-text font-bold leading-[1.05] mb-3"
+              style={{ fontSize: 'clamp(36px, 5.5vw, 56px)', letterSpacing: '-0.03em' }}>
               Download Anything.
             </h1>
-            <p className="hero-subtitle">
+            <p style={{ color: 'var(--text-2)', fontSize: '15px', lineHeight: '1.5' }}>
               {t('subtitle')}
             </p>
-            <div className="feature-chips">
-              {['Images', 'Videos', 'PDFs', 'Audio', 'Files'].map(f => (
-                <span key={f} className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border"
-                  style={{ borderColor: 'var(--border)', color: 'var(--text-2)', background: 'var(--surface)' }}>
-                  {f}
-                </span>
-              ))}
-            </div>
           </header>
 
-          {/* ── Card column ── */}
-          <div className="tool-stack">
+          {/* ── Input + results ── */}
+          <div className="space-y-3">
 
-          {/* ── Input card ── */}
-          <div className="rounded-2xl border overflow-hidden transition-shadow duration-200 input-card" style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
-            <div className="p-6 space-y-4">
-
-              {/* URL input */}
-              <div className="space-y-1.5">
-                <label className="block text-[10px] font-semibold uppercase" style={{ color: 'var(--text-3)', letterSpacing: '0.08em' }}>URL</label>
-                <div className="flex rounded-xl border overflow-hidden transition-all duration-150 input-inner"
-                  style={{ borderColor: parseError ? '#f43f5e' : 'var(--border-2)', background: 'var(--bg)' }}>
+              {/* URL input row — no card wrapper, floats on the page */}
+              <div className="flex rounded-2xl border overflow-hidden transition-all duration-150 input-inner"
+                style={{ borderColor: parseError ? '#f43f5e' : 'var(--border-2)', background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
                   <input
                     type="text"
                     value={template}
@@ -1306,7 +1288,6 @@ export default function App() {
                     <ModeChip isSingle={isSingle} isScanned={isScanned} isWistia={isWistia} isWebPage={isWebPage} urls={isScanned ? allScanImages : displayUrls} parseError={parseError} videoCount={scannedVideos.length} />
                   </div>
                 )}
-              </div>
 
               {/* Scan result tabs: Videos / Photos / Site assets / Files */}
               {isScanned && (scannedImages.length > 0 || scannedVideos.length > 0 || scannedFiles.length > 0) && (() => {
@@ -1564,7 +1545,6 @@ export default function App() {
                 </button>
               </div>
             </div>
-          </div>
 
           {/* Videos are now shown inline inside the main card as a tab */}
 
@@ -1594,44 +1574,14 @@ export default function App() {
             </div>
           )}
 
-          <LegalDisclaimer />
+          {/* Footer: compact legal + attribution */}
+          <div className="mt-6 space-y-3">
+            <LegalDisclaimer />
+            <p className="text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
+              {t('footer')}
+            </p>
+          </div>
 
-          <p className="mt-4 text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {t('footer')}
-          </p>
-        </div>{/* end card column */}
-          </section>
-
-          <aside className="side-column">
-            <section className="side-panel spotlight-panel">
-              <p className="eyebrow">Workflow</p>
-              <h2>Paste once. Extract cleanly.</h2>
-              <p>Scan public pages, collect the useful media, preview results, then save everything as a ZIP.</p>
-              <div className="metric-grid">
-                <div><strong>4</strong><span>media types</span></div>
-                <div><strong>ZIP</strong><span>auto-save</span></div>
-                <div><strong>Fast</strong><span>parallel fetch</span></div>
-              </div>
-            </section>
-
-            <FeedbackPanel onOpen={() => setFeedbackOpen(true)} />
-
-            <section className="side-panel settings-panel">
-              <p className="eyebrow">Preferences</p>
-              <div className="settings-row">
-                <span>Language</span>
-                <LanguagePicker lang={lang} setLang={setLang} />
-              </div>
-              <div className="settings-row">
-                <span>Appearance</span>
-                <button onClick={() => setDark(d => !d)}
-                  className="utility-pill flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium transition-all border"
-                  style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
-                  {dark ? <><Ic.Sun /> Light</> : <><Ic.Moon /> Dark</>}
-                </button>
-              </div>
-            </section>
-          </aside>
         </main>
       </div>
     </div>
