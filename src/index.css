@@ -167,12 +167,8 @@
   }
 
   .hero-grid {
-    width: min(100%, 1360px);
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 380px;
-    gap: clamp(28px, 5vw, 72px);
-    align-items: start;
-    padding-top: clamp(56px, 9vh, 120px);
+    width: min(100%, 640px);
+    margin: 0 auto;
   }
 
   .main-column {
