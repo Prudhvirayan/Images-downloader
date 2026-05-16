@@ -751,6 +751,178 @@ function FileCard({ file }) {
 }
 
 // ─── Legal Disclaimer ─────────────────────────────────────────────────────────
+// ─── Legal Full Page ─────────────────────────────────────────────────────────
+function LegalPage({ onBack, lang, setLang, dark, setDark }) {
+  const t = useT()
+  const SECTIONS = [
+    { title: '1. User Responsibility', body: 'Users are solely responsible for ensuring they have legal rights, permissions, licenses, and authorizations required to download, reproduce, distribute, modify, publish, sell, or commercially use any downloaded content.' },
+    { title: '2. No Rights Granted', body: 'This platform does not grant any of the following:', bullets: ['Ownership rights', 'Copyright licenses', 'Redistribution rights', 'Resale rights', 'Sublicensing rights', 'Commercial usage rights'], footer: 'Technical access does not equal legal permission.' },
+    { title: '3. Commercial Usage Restrictions', body: 'Users may not use downloaded content for any of the following without explicit licensing from the original rights holder:', bullets: ['Resale', 'Advertising', 'Client work', 'SaaS products', 'Marketing campaigns', 'Templates', 'Digital products', 'NFTs', 'Merchandise'] },
+    { title: '4. Copyright Compliance', body: 'Users must comply with all applicable laws and agreements including:', bullets: ['Copyright laws', 'Trademark laws', 'Intellectual property laws', 'Licensing agreements', 'Local jurisdiction laws'] },
+    { title: '5. Third-Party Platform Terms', body: 'Users are responsible for complying with the terms of service of any third-party platform, including but not limited to:', bullets: ['YouTube', 'Instagram', 'TikTok', 'Reddit', 'Pinterest', 'X (Twitter)', 'Vimeo'] },
+    { title: '6. Prohibited Activities', body: 'Users may not use this platform to:', bullets: ['Bypass paywalls or authentication systems', 'Access private or restricted content', 'Circumvent DRM protections', 'Scrape restricted systems', 'Download illegal content', 'Redistribute stolen or unauthorized content'] },
+    { title: '7. No Monitoring Obligation', body: 'We do not monitor, verify, review, or validate user downloads. We are not responsible for user actions after downloads occur.' },
+    { title: '8. Limitation of Liability', body: 'We are not liable for any of the following arising from use of this platform:', bullets: ['Copyright claims', 'Financial damages or lost profits', 'Legal disputes', 'Misuse of downloaded content', 'Regulatory violations', 'Third-party claims'], footer: 'Use at your own risk.' },
+    { title: '9. DMCA & Rights Holder Requests', body: 'Rights holders may submit takedown requests. We reserve the right to restrict sources, users, or functionality in response.' },
+    { title: '10. Service Availability', body: 'We may suspend access, restrict functionality, or terminate users who violate these policies at any time and without prior notice.' },
+    { title: '11. Agreement', body: 'By using this platform, you agree to all policies outlined above. Continued use constitutes ongoing acceptance of these terms.' },
+  ]
+
+  return (
+    <div className="app-shell min-h-screen">
+      <div className="motion-bg" aria-hidden="true">
+        <span className="beam beam-a" /><span className="beam beam-b" />
+      </div>
+      <div className="page-wrap px-4 sm:px-8 py-10">
+        <div className="mx-auto" style={{ maxWidth: '720px' }}>
+
+          {/* Mini nav */}
+          <div className="flex items-center justify-between mb-12">
+            <button onClick={onBack}
+              className="inline-flex items-center gap-1.5 text-sm transition-colors"
+              style={{ color: 'var(--text-3)' }}
+              onMouseEnter={e => e.currentTarget.style.color='var(--text-1)'}
+              onMouseLeave={e => e.currentTarget.style.color='var(--text-3)'}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><polyline points="15 18 9 12 15 6"/></svg>
+              {t('back_app')}
+            </button>
+            <div className="flex items-center gap-2">
+              <LanguagePicker lang={lang} setLang={setLang} />
+              <button onClick={() => setDark(d => !d)}
+                className="utility-pill flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium transition-all border"
+                style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
+                {dark ? <><Ic.Sun /><span className="hidden sm:inline">Light</span></> : <><Ic.Moon /><span className="hidden sm:inline">Dark</span></>}
+              </button>
+            </div>
+          </div>
+
+          {/* Page header */}
+          <div className="mb-12 pb-8 border-b" style={{ borderColor: 'var(--border)' }}>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full mb-5 select-none"
+              style={{ background: 'var(--violet-bg)', color: 'var(--violet)', fontSize: '12px', fontWeight: 600 }}>
+              {t('legal_tag')}
+            </div>
+            <h1 className="font-bold leading-tight mb-3" style={{ fontSize: 'clamp(26px,4vw,38px)', color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
+              {t('legal_page_title')}
+            </h1>
+            <p className="text-sm" style={{ color: 'var(--text-3)' }}>{t('legal_updated')}</p>
+          </div>
+
+          {/* Sections — document style, no individual boxes */}
+          <div>
+            {SECTIONS.map(({ title, body, bullets, footer }, idx) => (
+              <div key={title} className="py-8 border-b" style={{ borderColor: 'var(--border)' }}>
+                <div className="flex gap-6 sm:gap-10">
+                  {/* Section number accent */}
+                  <span className="flex-shrink-0 w-6 text-right text-[11px] font-mono pt-1 select-none"
+                    style={{ color: 'var(--violet)', opacity: 0.5 }}>
+                    {String(idx + 1).padStart(2, '0')}
+                  </span>
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <h2 className="font-semibold mb-3" style={{ fontSize: '15px', color: 'var(--text-1)' }}>
+                      {title.replace(/^\d+\.\s/, '')}
+                    </h2>
+                    <p className="leading-[1.75]" style={{ fontSize: '14px', color: 'var(--text-2)' }}>{body}</p>
+                    {bullets && (
+                      <ul className="mt-3 space-y-2">
+                        {bullets.map(b => (
+                          <li key={b} className="flex items-start gap-2.5 leading-relaxed"
+                            style={{ fontSize: '14px', color: 'var(--text-2)' }}>
+                            <span className="mt-[6px] w-1 h-1 rounded-full flex-shrink-0"
+                              style={{ background: 'var(--violet)', opacity: 0.55 }} />
+                            {b}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {footer && (
+                      <p className="mt-3 text-[13px] italic" style={{ color: 'var(--text-3)' }}>{footer}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-center text-xs mt-12 pb-6" style={{ color: 'var(--text-3)' }}>
+            © 2026 Idone. All rights reserved.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Legal Summary Card ──────────────────────────────────────────────────────
+function LegalSummary({ onReadFull }) {
+  const t = useT()
+  return (
+    <div className="rounded-2xl border overflow-hidden"
+      style={{ borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
+      <div className="flex items-center justify-between px-5 py-3.5 border-b"
+        style={{ background: 'var(--violet-bg)', borderColor: 'var(--violet-border)' }}>
+        <div className="flex items-center gap-2">
+          <span style={{ color: 'var(--violet)' }}><Ic.Lock /></span>
+          <span className="text-[13px] font-semibold" style={{ color: 'var(--violet)' }}>{t('legal_summary_title')}</span>
+        </div>
+        <button onClick={onReadFull}
+          className="text-[11px] font-semibold inline-flex items-center gap-1 transition-opacity"
+          style={{ color: 'var(--violet)' }}
+          onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
+          onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
+          {t('legal_read')}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+      <div className="px-5 py-4 space-y-2.5" style={{ background: 'var(--surface)' }}>
+        {[t('legal_p1'), t('legal_p2'), t('legal_p3')].map((point, i) => (
+          <div key={i} className="flex items-start gap-3">
+            <span className="flex-shrink-0 mt-1 text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center"
+              style={{ background: 'var(--violet-bg)', color: 'var(--violet)', border: '1px solid var(--violet-border)' }}>
+              {i + 1}
+            </span>
+            <p className="text-[12px] leading-relaxed" style={{ color: 'var(--text-2)' }}>{point}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Download Confirmation Modal ─────────────────────────────────────────────
+function DownloadConfirmModal({ onConfirm, onCancel }) {
+  const t = useT()
+  const [checked, setChecked] = useState(true)
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4"
+      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}>
+      <div className="rounded-2xl border shadow-2xl p-7 w-full max-w-md"
+        style={{ background: 'var(--surface-strong)', borderColor: 'var(--border)' }}>
+        <p className="font-semibold mb-1" style={{ fontSize: '15px', color: 'var(--text-1)' }}>{t('before_dl_title')}</p>
+        <p className="text-[13px] mb-5 leading-relaxed" style={{ color: 'var(--text-3)' }}>{t('before_dl_desc')}</p>
+        <label className="flex items-start gap-3 cursor-pointer select-none">
+          <input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)}
+            className="mt-0.5 w-4 h-4 flex-shrink-0 cursor-pointer accent-violet-600" />
+          <span className="text-[13px] leading-relaxed" style={{ color: 'var(--text-2)' }}>{t('before_dl_check')}</span>
+        </label>
+        <div className="flex gap-3 mt-6">
+          <button onClick={onCancel}
+            className="flex-1 rounded-xl py-2.5 text-sm font-medium border transition-colors"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-2)', background: 'transparent' }}>
+            {t('btn_cancel')}
+          </button>
+          <button onClick={onConfirm} disabled={!checked}
+            className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: 'var(--gradient-button)' }}>
+            {t('btn_continue_dl')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function LegalDisclaimer() {
   const t = useT()
   const [open, setOpen] = useState(false)
@@ -989,6 +1161,21 @@ export default function App() {
 
   const [feedbackOpen, setFeedbackOpen] = useState(false)
 
+  // ── Client-side routing ──
+  const [currentPath, setCurrentPath] = useState(window.location.pathname)
+  useEffect(() => {
+    const onPop = () => setCurrentPath(window.location.pathname)
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+  const navigate = (path) => { window.history.pushState(null, '', path); setCurrentPath(path) }
+
+  // ── Legal confirmation (once per browser, stored in localStorage) ──
+  const legalConfirmedRef = useRef(
+    (() => { try { return localStorage.getItem('idone_legal') === '1' } catch { return false } })()
+  )
+  const [pendingLegalAction, setPendingLegalAction] = useState(null) // 'download' | 'scan'
+
   // Cursor-following glow — lerp animation for a smooth "liquid" follow effect
   useEffect(() => {
     let animX = window.innerWidth / 2, animY = 120
@@ -1050,8 +1237,8 @@ export default function App() {
 
   const PLACEHOLDERS = [
     t('url_placeholder'),
-    'Ex: https://example.com/frame[001-120].jpg',
-    'Ex: https://site.com/chapter[1-50].pdf',
+    t('ph_seq'),
+    t('ph_pdf'),
   ]
   useEffect(() => {
     if (template) { setPhPrev(null); return }
@@ -1103,6 +1290,7 @@ export default function App() {
   }, [onInput])
 
   const onScan = useCallback(async () => {
+    if (!legalConfirmedRef.current) { setPendingLegalAction('scan'); return }
     if (!urls[0] || phase !== 'idle') return
     setPhase('scanning'); setScanError(null)
     try {
@@ -1144,6 +1332,7 @@ export default function App() {
   }, [urls, phase])
 
   const onDownload = useCallback(async () => {
+    if (!legalConfirmedRef.current) { setPendingLegalAction('download'); return }
     const targetUrls = isScanned
       ? (activeTab === 'quality' ? scannedImages.filter(i => i.score > 0).map(i => i.url)
          : activeTab === 'other'  ? scannedImages.filter(i => i.score <= 0).map(i => i.url)
@@ -1242,9 +1431,34 @@ export default function App() {
   const previewList = urls.length <= MAX_PREV + 1
     ? urls : [...urls.slice(0, MAX_PREV), null, urls[urls.length - 1]]
 
+  // Legal confirmation handler
+  const handleLegalConfirm = () => {
+    try { localStorage.setItem('idone_legal', '1') } catch {}
+    legalConfirmedRef.current = true
+    const action = pendingLegalAction
+    setPendingLegalAction(null)
+    if (action === 'download') onDownload()
+    if (action === 'scan') onScan()
+  }
+
+  // Route: /legal page
+  if (currentPath === '/legal') {
+    return (
+      <T.Provider value={t}>
+        <LegalPage onBack={() => navigate('/')} lang={lang} setLang={setLang} dark={dark} setDark={setDark} />
+      </T.Provider>
+    )
+  }
+
   return (
     <T.Provider value={t}>
     {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
+    {pendingLegalAction && (
+      <DownloadConfirmModal
+        onConfirm={handleLegalConfirm}
+        onCancel={() => setPendingLegalAction(null)}
+      />
+    )}
     <div className="app-shell min-h-screen transition-colors duration-200">
 
       {/* Lightbox */}
@@ -1286,17 +1500,17 @@ export default function App() {
             <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full mb-6 select-none"
               style={{ background: 'var(--violet-bg)', color: 'var(--violet)', fontSize: '12px', fontWeight: 600 }}>
               <span>✦</span>
-              <span>Fast. Private. No Limits.</span>
+              <span>{t('badge')}</span>
             </div>
 
             <h1 className="font-bold leading-[1.04] mb-5"
               style={{ fontSize: 'clamp(44px, 8vw, 72px)', letterSpacing: '-0.02em', color: 'var(--text-1)' }}>
-              Download <span className="gradient-text">anything</span><br />
-              from the web.
+              {t('hero_a')} <span className="gradient-text">{t('hero_b')}</span>
+              {t('hero_c') && <><br />{t('hero_c')}</>}
             </h1>
 
             <p className="mx-auto" style={{ color: 'var(--text-2)', fontSize: 'clamp(15px,1.5vw,16px)', lineHeight: '1.6', maxWidth: '580px' }}>
-              Images, videos, PDFs, audio, files & full pages — from any public URL.
+              {t('subtitle')}
             </p>
           </header>
 
@@ -1631,7 +1845,7 @@ export default function App() {
                     style={{ left: '3px', transform: autoSave ? 'translateX(18px)' : 'translateX(0)' }} />
                 </button>
                 {/* <span className="flex-shrink-0" style={{ color: 'var(--violet)' }}><Ic.Save /></span> */}
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Auto create and save ZIP</p>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{t('autosave_new')}</p>
                 <Tooltip content={t('autosave_tooltip')}>
                   <span className="text-[13px] leading-none select-none cursor-default" style={{ color: 'var(--text-3)' }}>ⓘ</span>
                 </Tooltip>
@@ -1667,21 +1881,20 @@ export default function App() {
           )}
 
           {/* ── Feature strip ── */}
-          <div className="flex items-center justify-center gap-8 mt-16">
+          <div className="flex items-center justify-center gap-0 mt-16">
             {[
-              { Icon: Ic.Shield, label: '100% Safe',   sub: 'No malware. No risks.',    color: '#10b981', bg: 'rgba(16,185,129,0.10)' },
-              { Icon: Ic.Lock,   label: 'Private',      sub: "We don't store anything.", color: 'var(--violet)', bg: 'var(--violet-bg)' },
-              { Icon: Ic.Zap,    label: 'Blazing Fast', sub: 'Downloads in seconds.',    color: '#5b8ef7', bg: 'rgba(91,142,247,0.10)' },
-            ].flatMap(({ Icon, label, sub, color, bg }, i) => [
+              { Icon: Ic.Shield, lk: 'feat_safe',    slk: 'feat_safe_sub',    color: '#10b981', bg: 'rgba(16,185,129,0.10)' },
+              { Icon: Ic.Lock,   lk: 'feat_private', slk: 'feat_private_sub', color: 'var(--violet)', bg: 'var(--violet-bg)' },
+              { Icon: Ic.Zap,    lk: 'feat_fast',    slk: 'feat_fast_sub',    color: '#5b8ef7', bg: 'rgba(91,142,247,0.10)' },
+            ].flatMap(({ Icon, lk, slk, color, bg }, i) => [
               i > 0 && <div key={`sep-${i}`} className="hidden sm:block w-px self-stretch mx-6 my-1" style={{ background: 'var(--border)' }} />,
-              <div key={label} className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: bg }}>
+              <div key={lk} className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
                   <span style={{ color }}><Icon /></span>
                 </div>
                 <div>
-                  <p className="text-sm font-semibold leading-tight" style={{ color: 'var(--text-1)' }}>{label}</p>
-                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>
+                  <p className="text-sm font-semibold leading-tight" style={{ color: 'var(--text-1)' }}>{t(lk)}</p>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{t(slk)}</p>
                 </div>
               </div>,
             ])}
@@ -1690,25 +1903,26 @@ export default function App() {
           {/* ── How it works ── */}
           <div className="mt-14">
             <h2 className="text-center font-semibold mb-7" style={{ fontSize: '16px', color: 'var(--text-1)' }}>
-              How it works
+              {t('how_works')}
             </h2>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-4">
               {[
-                { Icon: Ic.Link,     title: 'Paste URL',  desc: 'Paste the link of any public page you want to download.',        color: 'var(--violet)', border: 'var(--violet-border)' },
-                { Icon: Ic.Scan,     title: 'We scan it', desc: 'We scan the content and find all available downloadable files.', color: '#3b82f6',       border: 'rgba(59,130,246,0.25)' },
-                { Icon: Ic.Download, title: 'Download',   desc: 'Preview and download everything instantly as a ZIP file.',       color: '#10b981',       border: 'rgba(16,185,129,0.25)' },
-              ].map(({ Icon, title, desc, color, border }, i) => (
-                <div key={title} className="relative flex items-center gap-3 p-4 rounded-2xl border"
-                  style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)', borderTop: `2px solid ${border}` }}>
+                { Icon: Ic.Link,     tk: 'how_step1_title', dk: 'how_step1_desc', color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', glow: 'rgba(167,139,250,0.20)' },
+                { Icon: Ic.Scan,     tk: 'how_step2_title', dk: 'how_step2_desc', color: '#60a5fa', bg: 'rgba(96,165,250,0.12)',  glow: 'rgba(96,165,250,0.20)'  },
+                { Icon: Ic.Download, tk: 'how_step3_title', dk: 'how_step3_desc', color: '#34d399', bg: 'rgba(52,211,153,0.12)',  glow: 'rgba(52,211,153,0.20)'  },
+              ].map(({ Icon, tk, dk, color, bg, glow }, i) => (
+                <div key={tk} className="relative flex flex-col items-center text-center p-5 rounded-2xl border"
+                  style={{ background: 'var(--surface)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-card)' }}>
                   {i < 2 && (
-                    <span className="hidden sm:block absolute -right-4 top-1/2 -translate-y-1/2 text-[10px] font-medium z-10 select-none"
-                      style={{ color: 'var(--text-3)', letterSpacing: '1px' }}>···→</span>
+                    <span className="hidden sm:block absolute -right-5 top-1/2 -translate-y-1/2 text-[10px] font-medium z-10 select-none"
+                      style={{ color: 'var(--text-3)', letterSpacing: '2px' }}>···→</span>
                   )}
-                  <span className="flex-shrink-0" style={{ color }}><Icon /></span>
-                  <div>
-                    <p className="text-[13px] font-semibold leading-tight mb-1" style={{ color: 'var(--text-1)' }}>{title}</p>
-                    <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{desc}</p>
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 flex-shrink-0"
+                    style={{ background: bg, boxShadow: `0 0 20px ${glow}` }}>
+                    <span style={{ color }}><Icon /></span>
                   </div>
+                  <p className="text-[13px] font-semibold mb-1.5" style={{ color: 'var(--text-1)' }}>{t(tk)}</p>
+                  <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{t(dk)}</p>
                 </div>
               ))}
             </div>
@@ -1716,7 +1930,7 @@ export default function App() {
 
           {/* ── Footer ── */}
           <div className="mt-12 space-y-4">
-            <LegalDisclaimer />
+            <LegalSummary onReadFull={() => navigate('/legal')} />
             <p className="text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
               {t('footer')}
             </p>
