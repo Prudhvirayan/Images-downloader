@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo, createContext, useContext } from 'react'
 import { parseUrlTemplate, getFilenameFromUrl } from './utils/urlParser'
 import { fetchWithPool, buildAndDownloadZip } from './utils/fetcher'
-import { LANGUAGES, makeT } from './i18n/index.js'
+import { LANGUAGES, makeT, getLegalSections } from './i18n/index.js'
 import { useForm } from '@formspree/react'
 
 const T = createContext(null)
@@ -754,19 +754,7 @@ function FileCard({ file }) {
 // ─── Legal Full Page ─────────────────────────────────────────────────────────
 function LegalPage({ onBack, lang, setLang, dark, setDark }) {
   const t = useT()
-  const SECTIONS = [
-    { title: '1. User Responsibility', body: 'Users are solely responsible for ensuring they have legal rights, permissions, licenses, and authorizations required to download, reproduce, distribute, modify, publish, sell, or commercially use any downloaded content.' },
-    { title: '2. No Rights Granted', body: 'This platform does not grant any of the following:', bullets: ['Ownership rights', 'Copyright licenses', 'Redistribution rights', 'Resale rights', 'Sublicensing rights', 'Commercial usage rights'], footer: 'Technical access does not equal legal permission.' },
-    { title: '3. Commercial Usage Restrictions', body: 'Users may not use downloaded content for any of the following without explicit licensing from the original rights holder:', bullets: ['Resale', 'Advertising', 'Client work', 'SaaS products', 'Marketing campaigns', 'Templates', 'Digital products', 'NFTs', 'Merchandise'] },
-    { title: '4. Copyright Compliance', body: 'Users must comply with all applicable laws and agreements including:', bullets: ['Copyright laws', 'Trademark laws', 'Intellectual property laws', 'Licensing agreements', 'Local jurisdiction laws'] },
-    { title: '5. Third-Party Platform Terms', body: 'Users are responsible for complying with the terms of service of any third-party platform, including but not limited to:', bullets: ['YouTube', 'Instagram', 'TikTok', 'Reddit', 'Pinterest', 'X (Twitter)', 'Vimeo'] },
-    { title: '6. Prohibited Activities', body: 'Users may not use this platform to:', bullets: ['Bypass paywalls or authentication systems', 'Access private or restricted content', 'Circumvent DRM protections', 'Scrape restricted systems', 'Download illegal content', 'Redistribute stolen or unauthorized content'] },
-    { title: '7. No Monitoring Obligation', body: 'We do not monitor, verify, review, or validate user downloads. We are not responsible for user actions after downloads occur.' },
-    { title: '8. Limitation of Liability', body: 'We are not liable for any of the following arising from use of this platform:', bullets: ['Copyright claims', 'Financial damages or lost profits', 'Legal disputes', 'Misuse of downloaded content', 'Regulatory violations', 'Third-party claims'], footer: 'Use at your own risk.' },
-    { title: '9. DMCA & Rights Holder Requests', body: 'Rights holders may submit takedown requests. We reserve the right to restrict sources, users, or functionality in response.' },
-    { title: '10. Service Availability', body: 'We may suspend access, restrict functionality, or terminate users who violate these policies at any time and without prior notice.' },
-    { title: '11. Agreement', body: 'By using this platform, you agree to all policies outlined above. Continued use constitutes ongoing acceptance of these terms.' },
-  ]
+  const SECTIONS = getLegalSections(lang)
 
   return (
     <div className="app-shell min-h-screen">
