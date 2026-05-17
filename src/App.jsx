@@ -403,7 +403,12 @@ function Lightbox({ images, startIndex, onClose }) {
 }
 
 // ─── Mode Chip ────────────────────────────────────────────────────────────────
-function ModeChip({ isSingle, isScanned, isWistia, isWebPage, urls, parseError, videoCount = 0 }) {
+const YTDLP_PLATFORM_LABELS = {
+  youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', twitter: 'Twitter/X',
+  x: 'X (Twitter)', vimeo: 'Vimeo', dailymotion: 'Dailymotion', reddit: 'Reddit', facebook: 'Facebook',
+}
+
+function ModeChip({ isSingle, isScanned, isWistia, isYtdlp, isWebPage, urls, parseError, videoCount = 0 }) {
   const t = useT()
   if (!urls.length || parseError) return null
 
@@ -434,6 +439,13 @@ function ModeChip({ isSingle, isScanned, isWistia, isWebPage, urls, parseError, 
     <div className="flex items-center gap-1.5">
       <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: '#60a5fa' }} />
       <span className="text-xs font-medium" style={{ color: '#60a5fa' }}>{t('mode_wistia')}</span>
+    </div>
+  )
+
+  if (isYtdlp) return (
+    <div className="flex items-center gap-1.5">
+      <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: '#f87171' }} />
+      <span className="text-xs font-medium" style={{ color: '#f87171' }}>Video platform — click Extract &amp; Download</span>
     </div>
   )
 
@@ -1208,6 +1220,11 @@ export default function App() {
   const [isScanned, setIsScanned]   = useState(false)
   const [isWistia, setIsWistia]     = useState(false)
   const [isWebPage, setIsWebPage]   = useState(false)
+  const [isYtdlp, setIsYtdlp]      = useState(false)
+  const [ytdlpMeta, setYtdlpMeta]  = useState(null)
+  const [ytdlpMode, setYtdlpMode]   = useState('video')       // 'video' | 'audio'
+  const [ytdlpQuality, setYtdlpQuality] = useState('best')    // 'best' | '2k' | '1080p' | '720p' | '480p'
+  const [ytdlpAudioFmt, setYtdlpAudioFmt] = useState('m4a')  // 'm4a' | 'webm' | 'best'
 
   const [phase, setPhase]           = useState('idle')
   const [scanError, setScanError]   = useState(null)
@@ -1248,7 +1265,8 @@ export default function App() {
   const abortRef   = useRef(null)
   const objUrlsRef = useRef([])
 
-  const WISTIA_URL_RE  = /wistia\.com\/(?:embed\/medias|medias)\/([a-zA-Z0-9]+)/
+  const WISTIA_URL_RE    = /wistia\.com\/(?:embed\/medias|medias)\/([a-zA-Z0-9]+)/
+  const YTDLP_URL_RE     = /(?:youtube\.com\/(?:watch|shorts)|youtu\.be\/|tiktok\.com\/@.+\/video|instagram\.com\/(?:reel|p|tv)\/|(?:twitter|x)\.com\/.+\/status\/|vimeo\.com\/\d|dailymotion\.com\/video\/|reddit\.com\/.+\/comments\/|facebook\.com\/.+\/video|fb\.watch\/)/i
   const IMG_EXT_RE_SMP   = /\.(jpe?g|png|gif|webp|avif|bmp|svg)(\?.*)?$/i
   const AUDIO_EXT_RE_SMP = /\.(mp3|wav|ogg|flac|aac|m4a|opus|wma)(\?.*)?$/i
   const DOC_EXT_RE_SMP   = /\.(pdf|epub|docx?|xlsx?|pptx?|zip|rar)(\?.*)?$/i
@@ -1261,16 +1279,18 @@ export default function App() {
     setScannedImages([])
     setScannedFiles([])
     setActiveTab('quality')
+    setYtdlpMeta(null)
     const { error, urls: parsed, single } = parseUrlTemplate(value)
     setParseError(error)
     setUrls(parsed)
     setIsSingle(single)
-    const wistia = single && WISTIA_URL_RE.test(value)
+    const wistia  = single && WISTIA_URL_RE.test(value)
+    const ytdlp   = single && !wistia && YTDLP_URL_RE.test(value)
     setIsWistia(wistia)
-    // A single URL that doesn't look like a direct image file is a web page
+    setIsYtdlp(ytdlp)
     const path0 = value.split('?')[0]
     const isDirectFile = IMG_EXT_RE_SMP.test(path0) || AUDIO_EXT_RE_SMP.test(path0) || DOC_EXT_RE_SMP.test(path0)
-    setIsWebPage(single && !wistia && !isDirectFile)
+    setIsWebPage(single && !wistia && !ytdlp && !isDirectFile)
   }, [])
 
   const onPaste = useCallback(async () => {
@@ -1318,6 +1338,54 @@ export default function App() {
     }
     finally { setPhase('idle') }
   }, [urls, phase])
+
+  // ── yt-dlp extraction ──────────────────────────────────────────────────────
+  const onExtract = useCallback(async () => {
+    if (!legalConfirmedRef.current) { setPendingLegalAction('download'); return }
+    if (!urls[0] || phase !== 'idle') return
+    setPhase('scanning'); setScanError(null)
+    try {
+      const qs = new URLSearchParams({
+        url: urls[0],
+        mode: ytdlpMode,
+        quality: ytdlpQuality,
+        audio_fmt: ytdlpAudioFmt,
+      })
+      const res = await fetch(`/api/extract?${qs}`)
+      const ct = res.headers.get('content-type') || ''
+      if (!ct.includes('application/json')) {
+        setScanError(t('err_unavailable'))
+        setPhase('idle'); return
+      }
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        setScanError(data.error || 'Extraction failed')
+        setPhase('idle'); return
+      }
+      setYtdlpMeta({ title: data.title, uploader: data.uploader, platform: data.platform })
+      setPhase('idle')
+
+      const ext      = data.ext || (ytdlpMode === 'audio' ? 'm4a' : 'mp4')
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(data.url)}`
+      const filename = `${(data.title || 'video').replace(/[^\w\s-]/g, '').trim()}.${ext}`
+
+      const ctrl = new AbortController(); abortRef.current = ctrl
+      setPhase('fetching'); setStatuses([]); setDone(0)
+      const r = await fetch(proxyUrl, { signal: ctrl.signal })
+      if (!r.ok) throw new Error(`Download failed: ${r.status}`)
+      const blob = await r.blob()
+      if (ctrl.signal.aborted) return
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = filename
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+      setPhase('done')
+    } catch (e) {
+      if (!abortRef.current?.signal.aborted) setScanError(e.message || 'Extraction failed')
+      setPhase('idle')
+    }
+  }, [urls, phase, ytdlpMode, ytdlpQuality, ytdlpAudioFmt])
 
   const onDownload = useCallback(async () => {
     if (!legalConfirmedRef.current) { setPendingLegalAction('download'); return }
@@ -1394,7 +1462,7 @@ export default function App() {
     abortRef.current?.abort()
     objUrlsRef.current.forEach(u => URL.revokeObjectURL(u)); objUrlsRef.current = []
     setTemplate(''); setUrls([]); setParseError(null); setScanError(null)
-    setIsSingle(false); setIsScanned(false); setIsWistia(false); setIsWebPage(false); setScannedVideos([])
+    setIsSingle(false); setIsScanned(false); setIsWistia(false); setIsWebPage(false); setIsYtdlp(false); setYtdlpMeta(null); setScannedVideos([])
     setScannedImages([]); setScannedFiles([]); setActiveTab('quality')
     setPhase('idle'); setStatuses([]); setDone(0); setZipPct(null); setLbIdx(null)
   }, [])
@@ -1599,7 +1667,7 @@ export default function App() {
                 {/* Mode chip — only renders when there's URL content */}
                 {template && (
                   <div className="flex items-center">
-                    <ModeChip isSingle={isSingle} isScanned={isScanned} isWistia={isWistia} isWebPage={isWebPage} urls={isScanned ? allScanImages : displayUrls} parseError={parseError} videoCount={scannedVideos.length} />
+                    <ModeChip isSingle={isSingle} isScanned={isScanned} isWistia={isWistia} isYtdlp={isYtdlp} isWebPage={isWebPage} urls={isScanned ? allScanImages : displayUrls} parseError={parseError} videoCount={scannedVideos.length} />
                   </div>
                 )}
 
@@ -1759,8 +1827,76 @@ export default function App() {
                   </button>
                 )}
 
+                {/* ── Phase: idle — yt-dlp platform (YouTube, TikTok, etc.) ── */}
+                {phase === 'idle' && isYtdlp && urls.length > 0 && !parseError && (
+                  <div className="space-y-2">
+
+                    {/* Mode + quality chips — all inline */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {/* Video / Audio mode */}
+                      {[{ id: 'video', label: '🎬 Video' }, { id: 'audio', label: '🎵 Audio' }].map(({ id, label }) => (
+                        <button key={id} onClick={() => setYtdlpMode(id)}
+                          className="rounded-full px-2.5 py-1 text-[11px] font-semibold border transition-all"
+                          style={{
+                            background: ytdlpMode === id ? 'var(--gradient-button)' : 'var(--bg)',
+                            borderColor: ytdlpMode === id ? 'transparent' : 'var(--border)',
+                            color: ytdlpMode === id ? '#fff' : 'var(--text-2)',
+                          }}>
+                          {label}
+                        </button>
+                      ))}
+
+                      {/* Separator dot */}
+                      <span className="text-[10px]" style={{ color: 'var(--border-2)' }}>·</span>
+
+                      {/* Quality chips (video) or Format chips (audio) */}
+                      {ytdlpMode === 'video'
+                        ? [['best','Best'],['2k','2K'],['1080p','1080p'],['720p','720p'],['480p','480p']].map(([val, lbl]) => (
+                            <button key={val} onClick={() => setYtdlpQuality(val)}
+                              className="rounded-full px-2.5 py-1 text-[11px] font-medium border transition-all"
+                              style={{
+                                background: ytdlpQuality === val ? 'var(--violet-bg)' : 'transparent',
+                                borderColor: ytdlpQuality === val ? 'var(--violet)' : 'var(--border)',
+                                color: ytdlpQuality === val ? 'var(--violet)' : 'var(--text-3)',
+                              }}>
+                              {lbl}
+                            </button>
+                          ))
+                        : [['m4a','M4A'],['webm','WebM'],['best','Best']].map(([val, lbl]) => (
+                            <button key={val} onClick={() => setYtdlpAudioFmt(val)}
+                              className="rounded-full px-2.5 py-1 text-[11px] font-medium border transition-all"
+                              style={{
+                                background: ytdlpAudioFmt === val ? 'var(--violet-bg)' : 'transparent',
+                                borderColor: ytdlpAudioFmt === val ? 'var(--violet)' : 'var(--border)',
+                                color: ytdlpAudioFmt === val ? 'var(--violet)' : 'var(--text-3)',
+                              }}>
+                              {lbl}
+                            </button>
+                          ))
+                      }
+                    </div>
+
+                    {/* Extract button */}
+                    <button onClick={onExtract}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all"
+                      style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)', transition: 'opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease' }}
+                      onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
+                      onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
+                      <Ic.Download />
+                      {ytdlpMode === 'audio' ? 'Extract & Download Audio' : 'Extract & Download Video'}
+                    </button>
+
+                    {ytdlpMeta?.title && (
+                      <p className="text-[11px] text-center truncate px-1" style={{ color: 'var(--text-3)' }}>
+                        {ytdlpMeta.uploader && <span style={{ color: 'var(--text-2)' }}>{ytdlpMeta.uploader} · </span>}
+                        {ytdlpMeta.title}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* ── Phase: idle — single URL: context-aware buttons ── */}
-                {phase === 'idle' && isSingle && !isScanned && urls.length > 0 && !parseError && (
+                {phase === 'idle' && isSingle && !isScanned && !isYtdlp && urls.length > 0 && !parseError && (
                   isWebPage ? (
                     // Web page → Scan is the primary action; Download is secondary fallback
                     <div className="space-y-2">
