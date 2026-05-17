@@ -1298,7 +1298,7 @@ export default function App() {
     setScannedImages([])
     setScannedFiles([])
     setActiveTab('quality')
-    setYtdlpMeta(null)
+    setYtdlpInfo(null)
     const { error, urls: parsed, single } = parseUrlTemplate(value)
     setParseError(error)
     setUrls(parsed)
