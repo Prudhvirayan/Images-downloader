@@ -442,12 +442,7 @@ function ModeChip({ isSingle, isScanned, isWistia, isYtdlp, isWebPage, urls, par
     </div>
   )
 
-  if (isYtdlp) return (
-    <div className="flex items-center gap-1.5">
-      <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: '#f87171' }} />
-      <span className="text-xs font-medium" style={{ color: '#f87171' }}>Video platform — click Extract &amp; Download</span>
-    </div>
-  )
+  if (isYtdlp) return null  // info card shown below input instead
 
   if (isWebPage) return (
     <div className="flex items-center gap-1.5">
@@ -1220,11 +1215,12 @@ export default function App() {
   const [isScanned, setIsScanned]   = useState(false)
   const [isWistia, setIsWistia]     = useState(false)
   const [isWebPage, setIsWebPage]   = useState(false)
-  const [isYtdlp, setIsYtdlp]      = useState(false)
-  const [ytdlpMeta, setYtdlpMeta]  = useState(null)
-  const [ytdlpMode, setYtdlpMode]   = useState('video')       // 'video' | 'audio'
-  const [ytdlpQuality, setYtdlpQuality] = useState('best')    // 'best' | '2k' | '1080p' | '720p' | '480p'
-  const [ytdlpAudioFmt, setYtdlpAudioFmt] = useState('m4a')  // 'm4a' | 'webm' | 'best'
+  const [isYtdlp, setIsYtdlp]           = useState(false)
+  const [ytdlpMode, setYtdlpMode]       = useState('video')
+  const [ytdlpQuality, setYtdlpQuality] = useState('best')
+  const [ytdlpAudioFmt, setYtdlpAudioFmt] = useState('m4a')
+  const [ytdlpInfo, setYtdlpInfo]       = useState(null)   // fetched video metadata + formats
+  const [ytdlpLoading, setYtdlpLoading] = useState(false)
 
   const [phase, setPhase]           = useState('idle')
   const [scanError, setScanError]   = useState(null)
@@ -1261,6 +1257,29 @@ export default function App() {
     }, 3800)
     return () => { clearInterval(id); clearTimeout(t1) }
   }, [template])
+
+  // Auto-fetch video info when a yt-dlp platform URL is detected (debounced 600ms)
+  useEffect(() => {
+    setYtdlpInfo(null)
+    setYtdlpLoading(false)
+    if (!isYtdlp || !urls[0]) return
+    const ctrl = new AbortController()
+    const timer = setTimeout(async () => {
+      setYtdlpLoading(true)
+      try {
+        const res = await fetch(`/api/extract?url=${encodeURIComponent(urls[0])}&mode=info`, { signal: ctrl.signal })
+        const ct  = res.headers.get('content-type') || ''
+        if (!ct.includes('application/json')) return // API not available locally — silent fallback
+        const data = await res.json()
+        if (data.error || ctrl.signal.aborted) return
+        setYtdlpInfo(data)
+        if (data.video_formats?.length) setYtdlpQuality(data.video_formats[0].key)
+        if (data.audio_formats?.length) setYtdlpAudioFmt(data.audio_formats[0].key)
+      } catch { /* silently ignore — show static fallback chips */ }
+      finally { if (!ctrl.signal.aborted) setYtdlpLoading(false) }
+    }, 600)
+    return () => { clearTimeout(timer); ctrl.abort() }
+  }, [isYtdlp, template])
 
   const abortRef   = useRef(null)
   const objUrlsRef = useRef([])
@@ -1362,17 +1381,36 @@ export default function App() {
         setScanError(data.error || 'Extraction failed')
         setPhase('idle'); return
       }
-      setYtdlpMeta({ title: data.title, uploader: data.uploader, platform: data.platform })
-      setPhase('idle')
+      // ytdlpInfo already has the card — no separate meta state needed
 
       const ext      = data.ext || (ytdlpMode === 'audio' ? 'm4a' : 'mp4')
-      const proxyUrl = `/api/proxy?url=${encodeURIComponent(data.url)}`
       const filename = `${(data.title || 'video').replace(/[^\w\s-]/g, '').trim()}.${ext}`
 
+      // YouTube uses IP-bound signed URLs — the extraction IP (Vercel server) matches
+      // the proxy server IP on Vercel, so proxy works. For other platforms, the CDN
+      // URL is open, so we can try direct browser download to avoid the proxy size limit.
+      const isYoutube = data.platform === 'youtube'
+
+      if (!isYoutube) {
+        // Direct browser download — works for TikTok, Vimeo, Dailymotion, Reddit, etc.
+        setPhase('done')
+        const a = document.createElement('a')
+        a.href = data.url
+        a.download = filename
+        a.target = '_blank'
+        a.rel = 'noopener noreferrer'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        return
+      }
+
+      // YouTube: proxy through Vercel — same server IP as extraction, but limited to ~45s / ~50MB
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(data.url)}`
       const ctrl = new AbortController(); abortRef.current = ctrl
       setPhase('fetching'); setStatuses([]); setDone(0)
       const r = await fetch(proxyUrl, { signal: ctrl.signal })
-      if (!r.ok) throw new Error(`Download failed: ${r.status}`)
+      if (!r.ok) throw new Error(`YouTube download failed (${r.status}). Large videos may exceed server limits — try a lower quality.`)
       const blob = await r.blob()
       if (ctrl.signal.aborted) return
       const a = document.createElement('a')
@@ -1462,7 +1500,7 @@ export default function App() {
     abortRef.current?.abort()
     objUrlsRef.current.forEach(u => URL.revokeObjectURL(u)); objUrlsRef.current = []
     setTemplate(''); setUrls([]); setParseError(null); setScanError(null)
-    setIsSingle(false); setIsScanned(false); setIsWistia(false); setIsWebPage(false); setIsYtdlp(false); setYtdlpMeta(null); setScannedVideos([])
+    setIsSingle(false); setIsScanned(false); setIsWistia(false); setIsWebPage(false); setIsYtdlp(false); setYtdlpInfo(null); setYtdlpLoading(false); setScannedVideos([])
     setScannedImages([]); setScannedFiles([]); setActiveTab('quality')
     setPhase('idle'); setStatuses([]); setDone(0); setZipPct(null); setLbIdx(null)
   }, [])
@@ -1829,9 +1867,43 @@ export default function App() {
 
                 {/* ── Phase: idle — yt-dlp platform (YouTube, TikTok, etc.) ── */}
                 {phase === 'idle' && isYtdlp && urls.length > 0 && !parseError && (
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
 
-                    {/* Mode + quality chips — all inline */}
+                    {/* Video info card — shown once fetched */}
+                    {ytdlpInfo && (
+                      <div className="flex items-center gap-3 p-3 rounded-xl border"
+                        style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}>
+                        {ytdlpInfo.thumbnail && (
+                          <img src={ytdlpInfo.thumbnail} alt=""
+                            className="w-16 h-11 rounded-lg object-cover flex-shrink-0"
+                            onError={e => e.currentTarget.style.display='none'} />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-semibold leading-tight truncate" style={{ color: 'var(--text-1)' }}>
+                            {ytdlpInfo.title}
+                          </p>
+                          {ytdlpInfo.uploader && (
+                            <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-3)' }}>
+                              {ytdlpInfo.uploader}
+                              {ytdlpInfo.duration && ` · ${Math.floor(ytdlpInfo.duration/60)}:${String(ytdlpInfo.duration%60).padStart(2,'0')}`}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Loading state */}
+                    {ytdlpLoading && !ytdlpInfo && (
+                      <div className="flex items-center gap-2 py-1 px-1">
+                        <svg className="w-3.5 h-3.5 animate-spin flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                        </svg>
+                        <span className="text-[12px]" style={{ color: 'var(--text-3)' }}>Fetching video info…</span>
+                      </div>
+                    )}
+
+                    {/* Mode + quality chips */}
                     <div className="flex flex-wrap items-center gap-1.5">
                       {/* Video / Audio mode */}
                       {[{ id: 'video', label: '🎬 Video' }, { id: 'audio', label: '🎵 Audio' }].map(({ id, label }) => (
@@ -1845,53 +1917,49 @@ export default function App() {
                           {label}
                         </button>
                       ))}
-
-                      {/* Separator dot */}
                       <span className="text-[10px]" style={{ color: 'var(--border-2)' }}>·</span>
 
-                      {/* Quality chips (video) or Format chips (audio) */}
+                      {/* Dynamic quality chips from fetched info, or static fallback */}
                       {ytdlpMode === 'video'
-                        ? [['best','Best'],['2k','2K'],['1080p','1080p'],['720p','720p'],['480p','480p']].map(([val, lbl]) => (
-                            <button key={val} onClick={() => setYtdlpQuality(val)}
+                        ? (ytdlpInfo?.video_formats || [
+                            {key:'best',label:'Best'},{key:'1080',label:'1080p'},
+                            {key:'720',label:'720p'},{key:'480',label:'480p'},
+                          ]).map(f => (
+                            <button key={f.key} onClick={() => setYtdlpQuality(f.key)}
                               className="rounded-full px-2.5 py-1 text-[11px] font-medium border transition-all"
                               style={{
-                                background: ytdlpQuality === val ? 'var(--violet-bg)' : 'transparent',
-                                borderColor: ytdlpQuality === val ? 'var(--violet)' : 'var(--border)',
-                                color: ytdlpQuality === val ? 'var(--violet)' : 'var(--text-3)',
+                                background: ytdlpQuality === f.key ? 'var(--violet-bg)' : 'transparent',
+                                borderColor: ytdlpQuality === f.key ? 'var(--violet)' : 'var(--border)',
+                                color: ytdlpQuality === f.key ? 'var(--violet)' : 'var(--text-3)',
                               }}>
-                              {lbl}
+                              {f.label}
                             </button>
                           ))
-                        : [['m4a','M4A'],['webm','WebM'],['best','Best']].map(([val, lbl]) => (
-                            <button key={val} onClick={() => setYtdlpAudioFmt(val)}
+                        : (ytdlpInfo?.audio_formats || [
+                            {key:'m4a',label:'M4A'},{key:'webm',label:'WebM'},{key:'best',label:'Best'},
+                          ]).map(f => (
+                            <button key={f.key} onClick={() => setYtdlpAudioFmt(f.key)}
                               className="rounded-full px-2.5 py-1 text-[11px] font-medium border transition-all"
                               style={{
-                                background: ytdlpAudioFmt === val ? 'var(--violet-bg)' : 'transparent',
-                                borderColor: ytdlpAudioFmt === val ? 'var(--violet)' : 'var(--border)',
-                                color: ytdlpAudioFmt === val ? 'var(--violet)' : 'var(--text-3)',
+                                background: ytdlpAudioFmt === f.key ? 'var(--violet-bg)' : 'transparent',
+                                borderColor: ytdlpAudioFmt === f.key ? 'var(--violet)' : 'var(--border)',
+                                color: ytdlpAudioFmt === f.key ? 'var(--violet)' : 'var(--text-3)',
                               }}>
-                              {lbl}
+                              {f.label}
                             </button>
                           ))
                       }
                     </div>
 
                     {/* Extract button */}
-                    <button onClick={onExtract}
-                      className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all"
+                    <button onClick={onExtract} disabled={ytdlpLoading}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-60 disabled:cursor-wait"
                       style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)', transition: 'opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease' }}
-                      onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' }}
+                      onMouseEnter={e => { if (!ytdlpLoading) { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' } }}
                       onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
                       <Ic.Download />
-                      {ytdlpMode === 'audio' ? 'Extract & Download Audio' : 'Extract & Download Video'}
+                      {ytdlpMode === 'audio' ? 'Download Audio' : 'Download Video'}
                     </button>
-
-                    {ytdlpMeta?.title && (
-                      <p className="text-[11px] text-center truncate px-1" style={{ color: 'var(--text-3)' }}>
-                        {ytdlpMeta.uploader && <span style={{ color: 'var(--text-2)' }}>{ytdlpMeta.uploader} · </span>}
-                        {ytdlpMeta.title}
-                      </p>
-                    )}
                   </div>
                 )}
 
