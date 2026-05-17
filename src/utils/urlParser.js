@@ -8,10 +8,10 @@ export function parseUrlTemplate(template) {
   // No [start-end] or (start-end) bracket — treat as a single direct URL
   const match = BRACKET_RE.exec(trimmed)
   if (!match) {
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      return { error: 'URL must start with http:// or https://', urls: [], single: false }
-    }
-    return { error: null, urls: [trimmed], single: true }
+    // Auto-prepend https:// if the user omitted the protocol
+    const url = (trimmed.startsWith('http://') || trimmed.startsWith('https://'))
+      ? trimmed : 'https://' + trimmed
+    return { error: null, urls: [url], single: true }
   }
 
   // Sequence mode: [start-end] found
