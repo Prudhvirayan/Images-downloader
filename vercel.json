@@ -3,7 +3,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/proxy.js":   { "maxDuration": 45 },
-    "api/extract.py": { "maxDuration": 45, "runtime": "python3.12" }
+    "api/extract.py": { "maxDuration": 45 }
   },
   "rewrites": [
     { "source": "/legal", "destination": "/index.html" }
