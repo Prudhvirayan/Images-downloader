@@ -1,9 +1,26 @@
 import express from 'express'
 import { load as cheerioLoad } from 'cheerio'
-import { existsSync } from 'fs'
+import { execFile } from 'node:child_process'
+import { existsSync, createReadStream } from 'fs'
+import { mkdtemp, readdir, rm, stat } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
+import { promisify } from 'node:util'
 
 const app = express()
 app.use(express.json())
+const execFileAsync = promisify(execFile)
+const DEFAULT_PYTHON_EXECUTABLE = fileURLToPath(new URL('./.venv/bin/python', import.meta.url))
+const YOUTUBE_HOST_RE = /(^|\.)(youtube\.com|youtu\.be)$/i
+const FFMPEG_EXECUTABLE = process.env.IDONE_FFMPEG || 'ffmpeg'
+const proxyDiagnostic = (event, details = {}) => {
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[local proxy diagnostic]', event, details)
+  }
+}
 
 // In production, serve the built React frontend from dist/
 // (dist/ is built by `npm run build` and lives next to server.js)
@@ -13,8 +30,8 @@ if (existsSync('dist')) {
 
 const IMAGE_MIME_PREFIXES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/bmp', 'image/svg']
 const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|avif|bmp|svg)(\?[^"']*)?$/i
-const THUMB_RE = /thumb(nail)?|[\-_]sm[\-_]|[\-_]xs[\-_]|[\-_]icon|preview[\-_]|[\-_]small/i
-const FULLSIZE_RE = /full(size|res)?|[\-_]large|[\-_]orig(inal)?|[\-_]hq|[\-_]hires|[\-_]big|photo(?!s)/i
+const THUMB_RE = /thumb(nail)?|[-_]sm[-_]|[-_]xs[-_]|[-_]icon|preview[-_]|[-_]small/i
+const FULLSIZE_RE = /full(size|res)?|[-_]large|[-_]orig(inal)?|[-_]hq|[-_]hires|[-_]big|photo(?!s)/i
 
 // URL patterns that indicate junk images (icons, logos, ads, tracking)
 const JUNK_URL_RE = /favicon|sprite|1x1|tracking|placeholder|blank|spacer|separator/i
@@ -55,12 +72,12 @@ function httpErrorMessage(status) {
 
 const THUMB_UPGRADE_RULES = [
   [/(\d+)t(\.[a-z]+)$/i, '$1$2'],
-  [/[\-_]?thumb(\.[a-z]+)$/i, '$1'],
-  [/[\-_]thumbnail(\.[a-z]+)$/i, '$1'],
-  [/[\-_]small(\.[a-z]+)$/i, '$1'],
-  [/[\-_]sm(\.[a-z]+)$/i, '$1'],
-  [/[\-_](s|xs|xxs)(\.[a-z]+)$/i, '$2'],
-  [/[\-_](150|200|300|400)(\.[a-z]+)$/i, '$2'],
+  [/[-_]?thumb(\.[a-z]+)$/i, '$1'],
+  [/[-_]thumbnail(\.[a-z]+)$/i, '$1'],
+  [/[-_]small(\.[a-z]+)$/i, '$1'],
+  [/[-_]sm(\.[a-z]+)$/i, '$1'],
+  [/[-_](s|xs|xxs)(\.[a-z]+)$/i, '$2'],
+  [/[-_](150|200|300|400)(\.[a-z]+)$/i, '$2'],
 ]
 
 function isImage(contentType) {
@@ -80,7 +97,7 @@ function unwrapCdnSrc(raw) {
       const original = u.searchParams.get('url')
       if (original) return decodeURIComponent(original)
     }
-  } catch {}
+  } catch { /* optional enhancement failed; continue with the existing fallback */ }
   return raw
 }
 
@@ -135,7 +152,7 @@ async function upgradeThumbnail(url, referer) {
         redirect: 'follow',
       })
       if (res.ok && isImage(res.headers.get('content-type') || '')) return upgraded
-    } catch {}
+    } catch { /* optional enhancement failed; continue with the existing fallback */ }
   }
 
   return url
@@ -389,9 +406,12 @@ async function resolveWistiaVideo(hash) {
       .filter(a => a.ext === 'mp4' || a.type === 'original')
       .sort((a, b) => (b.width || 0) - (a.width || 0))[0]
     if (!mp4) return null
+    // Wistia's still frame is served as .bin; the .jpg variant with a resize hint returns a small JPEG thumbnail.
+    const still = assets.find(a => a.type === 'still_image' && a.url)
     return {
       directUrl: mp4.url,
       title: data?.media?.name || null,
+      thumbnail: still ? `${still.url.replace(/\.bin(\?.*)?$/, '.jpg')}?image_crop_resized=320x180` : null,
       width: mp4.width || null,
       height: mp4.height || null,
       duration: Math.round(data?.media?.duration || 0) || null,
@@ -399,15 +419,35 @@ async function resolveWistiaVideo(hash) {
   } catch { return null }
 }
 
-async function fetchImageFromUrl(targetUrl) {
+async function fetchImageFromUrl(targetUrl, { signal, onResponse } = {}) {
   const parsed = new URL(targetUrl)
   const referer = parsed.origin + '/'
   const headers = { ...BROWSER_HEADERS, Referer: referer, Accept: 'text/html,application/xhtml+xml,image/*,*/*;q=0.8' }
 
-  const response = await fetch(targetUrl, { headers, redirect: 'follow' })
+  const response = await fetch(targetUrl, { headers, redirect: 'follow', signal })
+  const contentType = response.headers.get('content-type') || ''
+  onResponse?.({ status: response.status, contentType })
   if (!response.ok) return { ok: false, status: response.status, message: httpErrorMessage(response.status) }
 
-  const contentType = response.headers.get('content-type') || ''
+  // Stream video and audio bodies through without buffering them in the Express process.
+  const normalizedContentType = contentType.toLowerCase()
+  if (normalizedContentType.startsWith('video/') || normalizedContentType.startsWith('audio/')) {
+    proxyDiagnostic('media stream branch entered', { contentType })
+    return {
+      ok: true,
+      stream: response.body,
+      status: response.status,
+      contentType,
+      contentLength: response.headers.get('content-length'),
+      contentRange: response.headers.get('content-range'),
+      acceptRanges: response.headers.get('accept-ranges'),
+      cacheControl: response.headers.get('cache-control'),
+      etag: response.headers.get('etag'),
+      lastModified: response.headers.get('last-modified'),
+    }
+  }
+
+  proxyDiagnostic('media stream branch skipped', { contentType: contentType || '(missing)' })
 
   // Direct image — try thumbnail upgrade before returning
   if (isImage(contentType)) {
@@ -422,7 +462,7 @@ async function fetchImageFromUrl(targetUrl) {
           const buffer = await upgRes.arrayBuffer()
           return { ok: true, buffer, contentType: upgRes.headers.get('content-type'), imageUrl: upgraded }
         }
-      } catch {}
+      } catch { /* optional enhancement failed; continue with the existing fallback */ }
     }
     const buffer = await response.arrayBuffer()
     return { ok: true, buffer, contentType, imageUrl: targetUrl }
@@ -446,10 +486,128 @@ async function fetchImageFromUrl(targetUrl) {
     return { ok: true, buffer, contentType: imgCT, imageUrl }
   }
 
+  proxyDiagnostic('Express rejected upstream content type', { status: 415, contentType: contentType || '(missing)' })
   return { ok: false, status: 415, message: `Unexpected content-type: ${contentType}` }
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
+
+// Local development bridge to the same Python handler deployed as a Vercel function.
+app.get('/api/extract', async (req, res) => {
+  const { url, mode, quality, audio_fmt: audioFmt } = req.query
+  if (typeof url !== 'string' || !url) return res.status(400).json({ error: 'url parameter required' })
+
+  let parsed
+  try { parsed = new URL(url) } catch { return res.status(400).json({ error: 'Invalid URL' }) }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return res.status(400).json({ error: 'Only HTTP/HTTPS URLs allowed' })
+  }
+
+  const params = new URLSearchParams({ url })
+  if (typeof mode === 'string') params.set('mode', mode)
+  if (typeof quality === 'string') params.set('quality', quality)
+  if (typeof audioFmt === 'string') params.set('audio_fmt', audioFmt)
+
+  try {
+    const { stdout } = await execFileAsync(
+      process.env.IDONE_PYTHON || DEFAULT_PYTHON_EXECUTABLE,
+      ['api/local-extract.py', `?${params}`],
+      { timeout: 45_000, maxBuffer: 1024 * 1024 }
+    )
+    const result = JSON.parse(stdout)
+    const body = JSON.parse(result.body)
+    if (result.status >= 500 && body.error?.includes("No module named 'yt_dlp'")) {
+      return res.status(503).json({
+        error: 'The yt-dlp Python dependency is missing. Install the dependencies in requirements.txt to enable local video extraction.',
+      })
+    }
+    // Local only: YouTube serves Shorts/most videos as separate video + audio streams,
+    // so Video mode is handed to /api/yt-merge, which merges them with FFmpeg.
+    const wantsVideo = (typeof mode !== 'string' || mode === 'video')
+    if (wantsVideo && YOUTUBE_HOST_RE.test(parsed.hostname) && (result.status === 200 || body.merge_required)) {
+      const mergeParams = new URLSearchParams({ url })
+      if (typeof quality === 'string') mergeParams.set('quality', quality)
+      return res.status(200).json({
+        title: body.title || 'video',
+        platform: 'youtube',
+        ext: 'mp4',
+        merge_path: `/api/yt-merge?${mergeParams}`,
+      })
+    }
+    return res.status(result.status).json(body)
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return res.status(503).json({
+        error: `Python executable not found: ${process.env.IDONE_PYTHON || DEFAULT_PYTHON_EXECUTABLE}. Set IDONE_PYTHON or create the project .venv.`,
+      })
+    }
+    if (err.code === 'ETIMEDOUT' || err.killed) {
+      return res.status(504).json({ error: 'Video extraction timed out. Try again or use a lower quality.' })
+    }
+    console.error('Extraction bridge error:', err.message)
+    return res.status(502).json({ error: 'The local extraction process failed.' })
+  }
+})
+
+// Local development only: download the selected YouTube quality plus its audio track
+// with yt-dlp, merge them into one MP4 with FFmpeg, and stream the file to the browser.
+
+app.get('/api/yt-merge', async (req, res) => {
+  const { url, quality } = req.query
+  let parsed
+  try { parsed = new URL(typeof url === 'string' ? url : '') } catch { return res.status(400).json({ error: 'Invalid URL' }) }
+  if (!['http:', 'https:'].includes(parsed.protocol) || !YOUTUBE_HOST_RE.test(parsed.hostname)) {
+    return res.status(400).json({ error: 'Only YouTube URLs can be merged' })
+  }
+
+  try {
+    await execFileAsync(FFMPEG_EXECUTABLE, ['-version'], { timeout: 10_000 })
+  } catch {
+    return res.status(503).json({ error: 'FFmpeg is required to merge YouTube video and audio. Install it with: brew install ffmpeg' })
+  }
+
+  const height = typeof quality === 'string' && /^\d{2,4}$/.test(quality) ? quality : null
+  // Direct (non-HLS) streams only; prefer the requested height, MP4/M4A, then H.264 for wide playback support.
+  const formatSort = [height ? `res:${height}` : 'res', 'ext:mp4:m4a', 'vcodec:h264'].join(',')
+  const workDir = await mkdtemp(join(tmpdir(), 'idone-yt-'))
+  const cleanup = () => rm(workDir, { recursive: true, force: true }).catch(() => {})
+  const startedAt = Date.now()
+  proxyDiagnostic('yt-merge started', { hostname: parsed.hostname, height: height || 'best' })
+
+  try {
+    const args = [
+      '-m', 'yt_dlp', '--no-playlist', '--no-progress', '--quiet', '--no-warnings',
+      '-f', 'bv*[protocol^=http]+ba[protocol^=http]/b[protocol^=http][acodec!=none]',
+      '-S', formatSort,
+      '--merge-output-format', 'mp4',
+      '-o', join(workDir, 'media.%(ext)s'),
+    ]
+    if (process.env.IDONE_FFMPEG) args.push('--ffmpeg-location', process.env.IDONE_FFMPEG)
+    args.push(parsed.href)
+    await execFileAsync(process.env.IDONE_PYTHON || DEFAULT_PYTHON_EXECUTABLE, args, { timeout: 170_000, maxBuffer: 4 * 1024 * 1024 })
+
+    const output = (await readdir(workDir)).find(name => /^media\.(mp4|mkv|webm)$/.test(name))
+    if (!output) throw new Error('yt-dlp finished without producing a merged file')
+    const filePath = join(workDir, output)
+    const { size } = await stat(filePath)
+    proxyDiagnostic('yt-merge completed', { file: output, bytes: size, ms: Date.now() - startedAt })
+
+    res.setHeader('Content-Type', output.endsWith('.mp4') ? 'video/mp4' : output.endsWith('.webm') ? 'video/webm' : 'video/x-matroska')
+    res.setHeader('Content-Length', String(size))
+    res.setHeader('Cache-Control', 'no-store')
+    await pipeline(createReadStream(filePath), res)
+  } catch (err) {
+    const detail = String(err.stderr || err.message || '').split('\n').find(line => line.includes('ERROR')) || ''
+    proxyDiagnostic('yt-merge failed', { killed: Boolean(err.killed), detail: detail.replace(/https?:\/\/\S+/g, '<url>').slice(0, 300) })
+    if (!res.headersSent) {
+      res.status(err.killed ? 504 : 502).json({ error: err.killed ? 'Merging timed out. Try a lower quality.' : 'Could not download and merge this YouTube video.' })
+    } else {
+      res.destroy()
+    }
+  } finally {
+    cleanup()
+  }
+})
 
 app.get('/api/proxy', async (req, res) => {
   // mode=scan: local dev forwards to /api/scan (Vercel uses inline handler in proxy.js)
@@ -463,16 +621,75 @@ app.get('/api/proxy', async (req, res) => {
   let parsed
   try { parsed = new URL(url) } catch { return res.status(400).send('Invalid URL') }
   if (!['http:', 'https:'].includes(parsed.protocol)) return res.status(400).send('Only HTTP/HTTPS URLs allowed')
+  proxyDiagnostic('proxy request received', { hostname: parsed.hostname })
+
+  const controller = new AbortController()
+  let timedOut = false
+  const timeout = setTimeout(() => {
+    timedOut = true
+    controller.abort(new Error('Upstream response headers timed out'))
+  }, 45_000)
+  const abortOnDisconnect = () => {
+    if (!res.writableEnded) controller.abort(new Error('Client disconnected'))
+  }
+  let proxyStage = 'upstream request'
+  const clearHeaderTimeout = (upstream) => {
+    clearTimeout(timeout)
+    proxyDiagnostic('upstream response', upstream)
+  }
+  req.once('aborted', abortOnDisconnect)
+  res.once('close', abortOnDisconnect)
 
   try {
-    const result = await fetchImageFromUrl(url)
-    if (!result.ok) return res.status(result.status ?? 500).send(result.message ?? 'Fetch failed')
+    const result = await fetchImageFromUrl(url, { signal: controller.signal, onResponse: clearHeaderTimeout })
+    if (!result.ok) {
+      proxyDiagnostic('upstream error response returned by Express', { status: result.status })
+      return res.status(result.status ?? 500).send(result.message ?? 'Fetch failed')
+    }
+
+    if (result.stream) {
+      res.status(result.status)
+      res.setHeader('Content-Type', result.contentType)
+      if (result.contentLength) res.setHeader('Content-Length', result.contentLength)
+      if (result.contentRange) res.setHeader('Content-Range', result.contentRange)
+      if (result.acceptRanges) res.setHeader('Accept-Ranges', result.acceptRanges)
+      if (result.cacheControl) res.setHeader('Cache-Control', result.cacheControl)
+      if (result.etag) res.setHeader('ETag', result.etag)
+      if (result.lastModified) res.setHeader('Last-Modified', result.lastModified)
+      proxyStage = 'video stream'
+      proxyDiagnostic('video streaming started', { status: result.status, contentType: result.contentType })
+      await pipeline(Readable.fromWeb(result.stream), res)
+      proxyStage = 'complete'
+      proxyDiagnostic('video streaming completed')
+      return
+    }
+
     res.setHeader('Content-Type', result.contentType)
     res.setHeader('X-Image-Url', encodeURIComponent(result.imageUrl))
     res.send(Buffer.from(result.buffer))
   } catch (err) {
-    console.error(`Proxy error for ${url}:`, err.message)
+    proxyDiagnostic('proxy error', {
+      stage: proxyStage,
+      name: err.name,
+      code: err.code,
+    })
+    if (res.destroyed || res.writableEnded) return
+    if (res.headersSent) {
+      res.destroy(err)
+      return
+    }
+    if (timedOut) return res.status(504).send('Upstream request timed out')
+    console.error('[local proxy diagnostic] request failed', {
+      hostname: parsed.hostname,
+      stage: proxyStage,
+      name: err.name,
+      code: err.code,
+    })
     res.status(500).send(`Error: ${err.message}`)
+  } finally {
+    clearHeaderTimeout()
+    req.off('aborted', abortOnDisconnect)
+    res.off('close', abortOnDisconnect)
   }
 })
 
@@ -529,7 +746,7 @@ app.get('/api/scan', async (req, res) => {
               if (images.length === 0) images = extractAllImagesFromHtml(gbHtml, url)
             }
           }
-        } catch {}
+        } catch { /* optional enhancement failed; continue with the existing fallback */ }
       }
 
       // Resolve Wistia hashes to direct MP4 URLs in parallel

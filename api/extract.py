@@ -112,27 +112,50 @@ class handler(BaseHTTPRequestHandler):
             if not info:
                 return self._json(404, {'error': 'No media found'})
 
-            formats = info.get('formats', [])
+            # Only direct single-file formats can be proxied and saved as a Blob.
+            # HLS/DASH manifests (m3u8, http_dash_segments) are playlists, not media files.
+            formats = [
+                f for f in (info.get('formats') or [])
+                if f.get('url') and f.get('protocol') in ('https', 'http')
+            ]
             chosen  = None
-            if formats:
-                if mode == 'audio':
-                    ao = [f for f in formats if f.get('vcodec','none') == 'none' and f.get('acodec','none') != 'none']
-                    pref = [f for f in ao if f.get('ext') == afmt]
-                    chosen = pref[-1] if pref else (ao[-1] if ao else formats[-1])
+            if mode == 'audio':
+                ao = [f for f in formats if f.get('vcodec','none') == 'none' and f.get('acodec','none') != 'none']
+                pref = [f for f in ao if f.get('ext') == afmt]
+                chosen = pref[-1] if pref else (ao[-1] if ao else None)
+                if not chosen and info.get('extractor_key', '').lower() != 'youtube':
+                    all_fmts = info.get('formats') or []
+                    chosen = (formats or all_fmts or [None])[-1]  # previous behavior for other platforms
+                if not chosen:
+                    return self._json(422, {'error': 'No downloadable audio stream was found for this video.'})
+            else:
+                h_cap = int(quality) if quality.isdigit() else None
+                comb = [
+                    f for f in formats
+                    if f.get('ext') == 'mp4'
+                    and f.get('vcodec','none') != 'none'
+                    and f.get('acodec','none') != 'none'
+                ]
+                capped = [f for f in comb if h_cap is None or (f.get('height') or 0) <= h_cap]
+                pool = capped or comb
+                if pool:
+                    chosen = sorted(pool, key=lambda f: f.get('height') or 0)[-1]
+                elif info.get('extractor_key', '').lower() != 'youtube':
+                    # Non-YouTube platforms keep the previous fallback, preferring direct files.
+                    all_fmts = info.get('formats') or []
+                    for candidates in (formats, all_fmts):
+                        capped_any = [f for f in candidates if h_cap is None or (f.get('height') or 0) <= h_cap]
+                        if capped_any or candidates:
+                            chosen = (capped_any or candidates)[-1]
+                            break
                 else:
-                    h_cap = int(quality) if quality.isdigit() else None
-                    comb = [
-                        f for f in formats
-                        if f.get('ext') == 'mp4'
-                        and f.get('vcodec','none') != 'none'
-                        and f.get('acodec','none') != 'none'
-                        and (h_cap is None or (f.get('height') or 0) <= h_cap)
-                    ]
-                    if comb:
-                        chosen = sorted(comb, key=lambda f: f.get('height') or 0)[-1]
-                    else:
-                        capped = [f for f in formats if h_cap is None or (f.get('height') or 0) <= h_cap]
-                        chosen = capped[-1] if capped else formats[-1]
+                    # YouTube often offers video and audio only as separate streams.
+                    return self._json(422, {
+                        'error': 'This video has no single-file MP4 with audio. Video and audio must be merged, which this server cannot do — try Audio mode or the local app.',
+                        'merge_required': True,
+                        'title': info.get('title') or 'video',
+                        'platform': info.get('extractor_key', '').lower(),
+                    })
 
             stream_url = (chosen or info).get('url') or info.get('url')
             if not stream_url:

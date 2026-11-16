@@ -10,7 +10,7 @@ async function googlebotFetch(url, referer) {
     })
     if (!res.ok) return null
     return await res.text()
-  } catch (_e) {
+  } catch {
     return null
   }
 }
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (!url) return res.status(400).json({ error: 'Missing url' })
 
   let parsed
-  try { parsed = new URL(url) } catch (_e) { return res.status(400).json({ error: 'Invalid URL' }) }
+  try { parsed = new URL(url) } catch { return res.status(400).json({ error: 'Invalid URL' }) }
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     return res.status(400).json({ error: 'Only HTTP/HTTPS URLs allowed' })
   }

@@ -7,7 +7,7 @@ function getOptimalConcurrency() {
     const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection
     if (conn?.saveData || conn?.effectiveType === '2g') return 1
     if (conn?.effectiveType === '3g') return 2
-  } catch {}
+  } catch { /* connection hints are optional; use default concurrency */ }
   if (/mobile|android|iphone|ipad/i.test(navigator.userAgent)) return 3
   return 6
 }
