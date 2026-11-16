@@ -1,5 +1,5 @@
 // Matches [n-m] or (n-m) — parentheses supported as mobile-friendly alternative
-const BRACKET_RE = /[\[(](\d+)-(\d+)[\])]/
+const BRACKET_RE = /(?:\[|\()(\d+)-(\d+)(?:\]|\))/
 
 export function parseUrlTemplate(template) {
   const trimmed = template.trim()
@@ -44,6 +44,6 @@ export function getFilenameFromUrl(url, fallbackIndex) {
     const pathname = new URL(url).pathname
     const name = pathname.split('/').pop()
     if (name) return name
-  } catch (_) {}
+  } catch { /* malformed URL uses the filename fallback below */ }
   return `image_${fallbackIndex + 1}.jpg`
 }

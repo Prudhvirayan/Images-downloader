@@ -3,8 +3,8 @@ import { load as cheerioLoad } from 'cheerio'
 
 export const IMAGE_MIME_PREFIXES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/bmp', 'image/svg']
 export const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|avif|bmp|svg)(\?[^"']*)?$/i
-const THUMB_RE   = /thumb(nail)?|[\-_]sm[\-_]|[\-_]xs[\-_]|[\-_]icon|preview[\-_]|[\-_]small/i
-const FULLSIZE_RE = /full(size|res)?|[\-_]large|[\-_]orig(inal)?|[\-_]hq|[\-_]hires|[\-_]big|photo(?!s)/i
+const THUMB_RE   = /thumb(nail)?|[-_]sm[-_]|[-_]xs[-_]|[-_]icon|preview[-_]|[-_]small/i
+const FULLSIZE_RE = /full(size|res)?|[-_]large|[-_]orig(inal)?|[-_]hq|[-_]hires|[-_]big|photo(?!s)/i
 const JUNK_URL_RE      = /favicon|sprite|1x1|tracking|placeholder|blank|spacer|separator/i
 const JUNK_FILENAME_RE = /logo|favicon|icon|sprite|banner|avatar|thumb-placeholder/i
 const ASSET_PATH_RE    = /\/webruntime\/|\/org-asset\/|\/_next\/static\/|\/node_modules\//i
@@ -38,12 +38,12 @@ export function httpErrorMessage(status) {
 
 const THUMB_UPGRADE_RULES = [
   [/(\d+)t(\.[a-z]+)$/i, '$1$2'],
-  [/[\-_]?thumb(\.[a-z]+)$/i, '$1'],
-  [/[\-_]thumbnail(\.[a-z]+)$/i, '$1'],
-  [/[\-_]small(\.[a-z]+)$/i, '$1'],
-  [/[\-_]sm(\.[a-z]+)$/i, '$1'],
-  [/[\-_](s|xs|xxs)(\.[a-z]+)$/i, '$2'],
-  [/[\-_](150|200|300|400)(\.[a-z]+)$/i, '$2'],
+  [/[-_]?thumb(\.[a-z]+)$/i, '$1'],
+  [/[-_]thumbnail(\.[a-z]+)$/i, '$1'],
+  [/[-_]small(\.[a-z]+)$/i, '$1'],
+  [/[-_]sm(\.[a-z]+)$/i, '$1'],
+  [/[-_](s|xs|xxs)(\.[a-z]+)$/i, '$2'],
+  [/[-_](150|200|300|400)(\.[a-z]+)$/i, '$2'],
 ]
 
 export function isImage(contentType) {
@@ -68,7 +68,7 @@ function unwrapCdnSrc(raw) {
     }
     // Contentful Image API: //images.ctfassets.net/...?w=800
     // Just return as-is; deoptimizeUrl will strip the size params
-  } catch {}
+  } catch { /* optional enhancement failed; continue with the existing fallback */ }
   return raw
 }
 
@@ -128,7 +128,7 @@ async function upgradeThumbnail(url, referer) {
     try {
       const res = await fetch(upgraded, { method: 'HEAD', headers: { ...BROWSER_HEADERS, Referer: referer }, redirect: 'follow' })
       if (res.ok && isImage(res.headers.get('content-type') || '')) return upgraded
-    } catch {}
+    } catch { /* optional enhancement failed; continue with the existing fallback */ }
   }
   return url
 }
@@ -322,9 +322,12 @@ export async function resolveWistiaVideo(hash) {
       .filter(a => a.ext === 'mp4' || a.type === 'original')
       .sort((a, b) => (b.width || 0) - (a.width || 0))[0]
     if (!mp4) return null
+    // Wistia's still frame is served as .bin; the .jpg variant with a resize hint returns a small JPEG thumbnail.
+    const still = assets.find(a => a.type === 'still_image' && a.url)
     return {
       directUrl: mp4.url,
       title: data?.media?.name || null,
+      thumbnail: still ? `${still.url.replace(/\.bin(\?.*)?$/, '.jpg')}?image_crop_resized=320x180` : null,
       width: mp4.width || null,
       height: mp4.height || null,
       duration: Math.round(data?.media?.duration || 0) || null,
@@ -351,7 +354,7 @@ export async function fetchImageFromUrl(targetUrl) {
           const buffer = await upgRes.arrayBuffer()
           return { ok: true, buffer, contentType: upgRes.headers.get('content-type'), imageUrl: upgraded }
         }
-      } catch {}
+      } catch { /* optional enhancement failed; continue with the existing fallback */ }
     }
     const buffer = await response.arrayBuffer()
     return { ok: true, buffer, contentType, imageUrl: targetUrl }

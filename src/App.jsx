@@ -138,6 +138,11 @@ const Ic = {
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
     </svg>
   ),
+  Video: ({cls='w-4 h-4'}) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className={cls}>
+      <rect x="2" y="5" width="15" height="14" rx="2"/><path d="m17 10 5-3v10l-5-3z"/>
+    </svg>
+  ),
   Save: () => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
       <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
@@ -160,6 +165,169 @@ function TbBtn({ onClick, title, children, wide=false, active=false }) {
 
 const SPEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
+// Video thumbnail with a static video-icon placeholder when there is no image or it fails to load.
+function VideoThumb({ src, size = 'sm', onSave, saveLabel }) {
+  const [failed, setFailed] = useState(false)
+  const [saving, setSaving] = useState(false)
+  // 'lg' matches the height of a stacked Preview + Download pair (16:9).
+  const dims = size === 'lg' ? 'w-[118px] h-[66px]' : 'w-16 h-11'
+  const canSave = Boolean(onSave && src && !failed)
+  return (
+    <div className="relative group flex-shrink-0">
+      <div className={`${dims} rounded-lg overflow-hidden flex items-center justify-center`}
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
+        {src && !failed
+          ? <img src={src} alt="" className="w-full h-full object-cover" onError={() => setFailed(true)} />
+          : <Ic.Video cls={size === 'lg' ? 'w-6 h-6' : 'w-5 h-5'} />}
+      </div>
+      {/* Save-thumbnail action: small corner button, shown on hover/focus (always on touch screens) */}
+      {canSave && (
+        <button type="button" aria-label={saveLabel} disabled={saving}
+          onClick={async e => { e.stopPropagation(); setSaving(true); try { await onSave() } finally { setSaving(false) } }}
+          className="thumb-save absolute bottom-1 right-1 w-6 h-6 rounded-md flex items-center justify-center text-white">
+          {saving ? <span className="media-dl-spinner" style={{ width: 10, height: 10 }} /> : <Ic.Download />}
+          <span role="tooltip" className="thumb-save-tip">{saveLabel}</span>
+        </button>
+      )}
+    </div>
+  )
+}
+
+// YouTube video ID from watch, shorts, embed, live or youtu.be URLs.
+function youtubeId(url) {
+  const m = String(url || '').match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([\w-]{11})/)
+  return m ? m[1] : null
+}
+
+// Original YouTube thumbnails, highest quality first. Shorts also have a vertical original
+// ("oardefault", e.g. 720×1280, without side bars); maxresdefault (1280×720) is missing on some videos.
+function youtubeThumbCandidates(pageUrl, fallback) {
+  const id = youtubeId(pageUrl)
+  const names = /\/shorts\//.test(String(pageUrl)) ? ['oardefault', 'maxresdefault', 'sddefault', 'hqdefault'] : ['maxresdefault', 'sddefault', 'hqdefault']
+  const list = id ? names.map(n => `https://i.ytimg.com/vi/${id}/${n}.jpg`) : []
+  return fallback ? [...list, fallback] : list
+}
+
+// Fetch a thumbnail through the image proxy (avoids CORS) and save it. Tries each candidate URL in order;
+// if none can be fetched, opens the first one so the user can still save it.
+async function saveThumbnail(urls, baseName) {
+  const candidates = (Array.isArray(urls) ? urls : [urls]).filter(Boolean)
+  try {
+    let blob = null
+    for (const url of candidates) {
+      const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`).catch(() => null)
+      if (!res?.ok) continue
+      const b = await res.blob()
+      if (b.size > 2000) { blob = b; break } // skip YouTube's tiny "no image" placeholder
+    }
+    if (!blob) throw new Error('No thumbnail available')
+    const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg').replace(/\+.*/, '')
+    const objUrl = URL.createObjectURL(blob)
+    saveObjectUrl(objUrl, `${(baseName || 'thumbnail').replace(/[\\/:*?"<>|]/g, '').trim()} - thumbnail.${ext}`)
+    setTimeout(() => URL.revokeObjectURL(objUrl), 10000)
+  } catch {
+    if (candidates[0]) window.open(candidates[0], '_blank', 'noopener,noreferrer')
+  }
+}
+
+// Decode HTML entities that pages leave in titles (e.g. "&amp;" → "&"). Textarea content is never executed.
+function decodeEntities(text) {
+  if (!text || !text.includes('&')) return text
+  const el = document.createElement('textarea')
+  el.innerHTML = text
+  return el.value
+}
+
+// Save an in-memory object URL to disk with the given filename.
+function saveObjectUrl(objUrl, filename) {
+  const a = document.createElement('a')
+  a.href = objUrl
+  a.download = filename
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+}
+
+// Upright control bar for the preview video. The browser's built-in controls are part of the <video>
+// element, so they would rotate with it; these live outside the rotated element.
+function MediaControls({ mediaRef, src, active }) {
+  const [hovered, setHovered]   = useState(false)
+  const [toggled, setToggled]   = useState(false) // briefly true after play/pause so the change is visible
+  const toggleTimer = useRef(null)
+  const [paused, setPaused]     = useState(true)
+  const [time, setTime]         = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [muted, setMuted]       = useState(false)
+  const [volume, setVolume]     = useState(1)
+
+  useEffect(() => {
+    const m = mediaRef.current
+    if (!m) return
+    const sync = () => {
+      setPaused(m.paused); setTime(m.currentTime || 0)
+      setDuration(Number.isFinite(m.duration) ? m.duration : 0)
+      setMuted(m.muted); setVolume(m.volume)
+    }
+    const events = ['play', 'pause', 'timeupdate', 'loadedmetadata', 'durationchange', 'volumechange', 'ended']
+    events.forEach(ev => m.addEventListener(ev, sync))
+    const onToggle = () => {
+      setToggled(true)
+      clearTimeout(toggleTimer.current)
+      toggleTimer.current = setTimeout(() => setToggled(false), 2000)
+    }
+    m.addEventListener('play', onToggle)
+    m.addEventListener('pause', onToggle)
+    sync()
+    return () => {
+      events.forEach(ev => m.removeEventListener(ev, sync))
+      m.removeEventListener('play', onToggle)
+      m.removeEventListener('pause', onToggle)
+      clearTimeout(toggleTimer.current)
+    }
+  }, [mediaRef, src])
+
+  const fmt = secs => `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`
+  const toggle = () => { const m = mediaRef.current; if (!m) return; if (m.paused) m.play().catch(() => {}); else m.pause() }
+  const stop = e => e.stopPropagation()
+  // Shown while the pointer is moving over the preview, for 2 s after play/pause, or while hovering the bar.
+  // Paused videos hide it too, so a paused frame can be viewed without the bar on top.
+  const visible = active || toggled || hovered
+
+  return (
+    <div onMouseDown={stop} onClick={stop} onTouchStart={stop} onWheel={stop}
+      onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+      aria-hidden={!visible}
+      className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-3 py-2 rounded-xl"
+      style={{
+        width: 'min(640px, 92vw)', background: 'rgba(10,10,12,0.75)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.08)',
+        opacity: visible ? 1 : 0, transform: `translate(-50%, ${visible ? '0' : '8px'})`, pointerEvents: visible ? 'auto' : 'none',
+        transition: 'opacity 0.25s ease, transform 0.25s ease',
+      }}>
+      <button type="button" onClick={toggle} aria-label={paused ? 'Play' : 'Pause'}
+        className="w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-white bg-white/10 hover:bg-white/20 transition-colors">
+        {paused ? <Ic.Play /> : <Ic.Pause />}
+      </button>
+      <span className="text-[11px] tabular-nums text-white/70 flex-shrink-0">{fmt(time)} / {fmt(duration)}</span>
+      <input type="range" min={0} max={duration || 0} step={0.05} value={Math.min(time, duration || 0)} aria-label="Seek"
+        onChange={e => { const m = mediaRef.current; if (m) m.currentTime = Number(e.target.value) }}
+        className="flex-1 min-w-0 cursor-pointer" style={{ accentColor: '#8b5cf6' }} />
+      <button type="button" aria-label={muted || volume === 0 ? 'Unmute' : 'Mute'}
+        onClick={() => { const m = mediaRef.current; if (m) m.muted = !m.muted }}
+        className="w-7 h-7 flex-shrink-0 flex items-center justify-center text-white/70 hover:text-white transition-colors">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+          {muted || volume === 0
+            ? <><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" /></>
+            : <path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14" />}
+        </svg>
+      </button>
+      <input type="range" min={0} max={1} step={0.05} value={muted ? 0 : volume} aria-label="Volume"
+        onChange={e => { const m = mediaRef.current; if (m) { m.volume = Number(e.target.value); m.muted = m.volume === 0 } }}
+        className="w-20 flex-shrink-0 cursor-pointer hidden sm:block" style={{ accentColor: '#8b5cf6' }} />
+    </div>
+  )
+}
+
+const ZOOM_STEPS = [0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8, 10]
+
 function Lightbox({ images, startIndex, onClose }) {
   const [index, setIndex]       = useState(startIndex)
   const [rotation, setRotation] = useState(0)
@@ -178,16 +346,100 @@ function Lightbox({ images, startIndex, onClose }) {
 
   const total   = images.length
   const current = images[index]
+  const isMedia = current.mediaType === 'video' || current.mediaType === 'audio'
+  const mediaRef = useRef(null)
+  // Video control bar: visible while the pointer moves; hides 2 s after it stops or when it leaves.
+  const [ctlActive, setCtlActive] = useState(true)
+  const ctlTimer = useRef(null)
+  const pokeControls = useCallback(() => {
+    setCtlActive(true)
+    clearTimeout(ctlTimer.current)
+    ctlTimer.current = setTimeout(() => setCtlActive(false), 2000)
+  }, [])
+  useEffect(() => {
+    ctlTimer.current = setTimeout(() => setCtlActive(false), 2000)
+    return () => clearTimeout(ctlTimer.current)
+  }, [])
+  // Keyboard feedback: a small badge at the top centre for ~0.4 s, so shortcuts don't reveal the control bar.
+  const [hud, setHud] = useState(null) // { icon: 'vol' | 'mute' | null, text, id }
+  const hudTimer = useRef(null)
+  const fmtTime = secs => `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`
+  const showHud = useCallback((text, icon = null) => {
+    setHud({ text, icon, id: Date.now() })
+    clearTimeout(hudTimer.current)
+    hudTimer.current = setTimeout(() => setHud(h => (h ? { ...h, hidden: true } : h)), 400)
+  }, [])
+  useEffect(() => () => clearTimeout(hudTimer.current), [])
   const resetView = useCallback(() => setVt({ x: 0, y: 0, scale: 1 }), [])
-  const prev = useCallback(() => { setPlaying(false); setIndex(i => Math.max(0, i - 1)) }, [])
-  const next = useCallback(() => { setPlaying(false); setIndex(i => (i + 1) % total) }, [total])
 
-  useEffect(() => { resetView(); setRotation(0) }, [index, resetView])
+  // Zoom has two stops: "Fit" (scale 1, the whole picture on screen) and "100%" (actual size, one file pixel
+  // per screen pixel). nativeScale is the zoom factor at which the fitted picture reaches its actual size.
+  const imgRef = useRef(null)
+  const nativeRef = useRef(null)
+  const [nativeScale, setNativeScale] = useState(null)
+  const measureNative = useCallback(() => {
+    const el = current.mediaType === 'video' ? mediaRef.current : current.mediaType === 'audio' ? null : imgRef.current
+    const natural = el ? (el.naturalWidth || el.videoWidth) : 0
+    const shown = el ? el.offsetWidth : 0
+    const n = natural && shown ? natural / shown : null
+    nativeRef.current = n
+    setNativeScale(n)
+  }, [current.mediaType])
+  useEffect(() => {
+    window.addEventListener('resize', measureNative)
+    document.addEventListener('fullscreenchange', measureNative)
+    return () => { window.removeEventListener('resize', measureNative); document.removeEventListener('fullscreenchange', measureNative) }
+  }, [measureNative])
+  const zoomStops = useCallback(() => {
+    // Measured live (not only on load) so the 100% stop is always available and current.
+    const el = current.mediaType === 'video' ? mediaRef.current : current.mediaType === 'audio' ? null : imgRef.current
+    const natural = el ? (el.naturalWidth || el.videoWidth) : 0
+    const shown = el ? el.offsetWidth : 0
+    const n = natural && shown ? natural / shown : null
+    if (n !== nativeRef.current) { nativeRef.current = n; setNativeScale(n) }
+    return n && n >= 0.5 && n <= 10 && Math.abs(n - 1) > 0.03 ? [1, n] : [1]
+  }, [current.mediaType])
+  const stopLabel = useCallback(z => {
+    const n = nativeRef.current
+    if (z === 1) return n && Math.abs(n - 1) <= 0.03 ? 'Fit to screen · 100%' : 'Fit to screen'
+    return '100% · Actual size'
+  }, [])
+
+  // Buttons and +/− keys move through fixed levels around the centre, plus the Fit and 100% stops.
+  // (The scroll wheel zooms smoothly at the cursor; the next button press snaps to a level.)
+  const zoomStep = useCallback(dir => {
+    const cur = vtRef.current
+    const stops = zoomStops()
+    const levels = [...ZOOM_STEPS.filter(z => stops.every(st => Math.abs(z - st) / st > 0.08)), ...stops].sort((a, b) => a - b)
+    const next = dir > 0
+      ? levels.find(z => z > cur.scale + 0.001)
+      : [...levels].reverse().find(z => z < cur.scale - 0.001)
+    if (!next) { showHud(dir > 0 ? 'Max zoom' : 'Min zoom'); return }
+    const ratio = next / cur.scale
+    setVt({ x: cur.x * ratio, y: cur.y * ratio, scale: next })
+    if (stops.includes(next)) showHud(stopLabel(next))
+  }, [showHud, zoomStops, stopLabel])
+  const prev = useCallback(() => {
+    setPlaying(false)
+    resetView()
+    setRotation(0)
+    setIndex(i => Math.max(0, i - 1))
+  }, [resetView])
+  const next = useCallback(() => {
+    setPlaying(false)
+    resetView()
+    setRotation(0)
+    setIndex(i => (i + 1) % total)
+  }, [resetView, total])
   useEffect(() => {
     if (!playing) return
-    const t = setTimeout(() => setIndex(i => (i + 1) % total), speed * 1000)
+    const t = setTimeout(() => {
+      resetView()
+      setRotation(0)
+      setIndex(i => (i + 1) % total)
+    }, speed * 1000)
     return () => clearTimeout(t)
-  }, [playing, index, speed, total])
+  }, [playing, index, speed, total, resetView])
 
   useEffect(() => {
     const fn = () => setIsFS(!!document.fullscreenElement)
@@ -206,16 +458,69 @@ function Lightbox({ images, startIndex, onClose }) {
     try {
       if (!document.fullscreenElement) await lbRef.current?.requestFullscreen()
       else await document.exitFullscreen()
-    } catch {}
+    } catch { /* Fullscreen may be unavailable or denied by the browser. */ }
   }, [])
 
   useEffect(() => {
     function onKey(e) {
       if (e.key === 'Escape' && !document.fullscreenElement) { onClose(); return }
+      // Z: zoomed anywhere → Fit; at Fit → 100% (actual size); at 100% → Fit.
+      if (current.mediaType !== 'audio' && (e.key === 'z' || e.key === 'Z') && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault(); e.stopPropagation() // keep page/extension shortcuts (e.g. "rewind") from also firing
+        const stops = zoomStops()
+        const cur = vtRef.current.scale
+        const target = cur === 1 && stops.length > 1 ? stops[1] : 1
+        if (target !== cur) { setVt({ x: 0, y: 0, scale: target }); showHud(stopLabel(target)) }
+        else showHud(stopLabel(1))
+        return
+      }
+      if (current.mediaType !== 'audio' && (e.key === '+' || e.key === '=')) { e.preventDefault(); zoomStep(1); return }
+      if (current.mediaType !== 'audio' && (e.key === '-' || e.key === '_')) { e.preventDefault(); zoomStep(-1); return }
+      // Video/audio shortcuts: 0–9 jump to 0%–90% of the duration; ←/→ seek 5 s when there is nothing to navigate to.
+      if (isMedia && /^[0-9]$/.test(e.key)) {
+        const m = mediaRef.current
+        if (m && Number.isFinite(m.duration)) { m.currentTime = m.duration * (Number(e.key) / 10); showHud(`${fmtTime(m.currentTime)} / ${fmtTime(m.duration)}`) }
+        return
+      }
+      // ↑/↓ change volume by 10%; M toggles mute.
+      if (isMedia && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault()
+        const m = mediaRef.current
+        if (m) {
+          const v = Math.round((m.muted ? 0 : m.volume) * 10) / 10 + (e.key === 'ArrowUp' ? 0.1 : -0.1)
+          m.volume = Math.min(1, Math.max(0, v))
+          m.muted = m.volume === 0
+          showHud(m.muted ? 'Muted' : `${Math.round(m.volume * 100)}%`, m.muted ? 'mute' : 'vol')
+        }
+        return
+      }
+      if (isMedia && (e.key === 'm' || e.key === 'M')) {
+        const m = mediaRef.current
+        if (m) {
+          if (m.muted && m.volume === 0) m.volume = 0.5 // unmuting from zero volume restores an audible level
+          m.muted = !m.muted
+          showHud(m.muted ? 'Muted' : `${Math.round(m.volume * 100)}%`, m.muted ? 'mute' : 'vol')
+        }
+        return
+      }
+      if (isMedia && total === 1 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        const m = mediaRef.current
+        if (m && Number.isFinite(m.duration)) {
+          m.currentTime = Math.min(m.duration, Math.max(0, m.currentTime + (e.key === 'ArrowRight' ? 5 : -5)))
+          showHud(`${e.key === 'ArrowRight' ? '+5s' : '−5s'} · ${fmtTime(m.currentTime)}`)
+        }
+        return
+      }
       if (e.key === 'ArrowLeft')  prev()
       if (e.key === 'ArrowRight') next()
       if (e.key === 'r' || e.key === 'R') { resetView(); setRotation(r => (r + 90) % 360) }
       if (e.key === '0') { resetView(); setRotation(0) }
+      if (e.key === ' ' && isMedia) {
+        e.preventDefault()
+        const m = mediaRef.current
+        if (m) { if (m.paused) m.play().catch(() => {}); else m.pause() }
+        return
+      }
       if (e.key === ' ') {
         e.preventDefault()
         setPlaying(p => {
@@ -224,32 +529,102 @@ function Lightbox({ images, startIndex, onClose }) {
           return next
         })
       }
-      if (/^[1-9]$/.test(e.key)) setSpeed(parseInt(e.key))
+      if (/^[1-9]$/.test(e.key) && !isMedia) setSpeed(parseInt(e.key))
       if (e.key === 'f' || e.key === 'F') toggleFS()
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, prev, next, resetView, toggleFS])
+    // Capture phase: the preview's shortcuts run before other page/extension listeners.
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [onClose, prev, next, resetView, toggleFS, isMedia, total, showHud, zoomStep, zoomStops, stopLabel, current.mediaType])
 
-  const zoomAt = useCallback((clientX, clientY, factor) => {
+  const [wheeling, setWheeling] = useState(false)
+  const wheelTimer = useRef(null)
+  const zoomAt = useCallback((clientX, clientY, factor, leavingStop = null) => {
     const el = ctrRef.current
     if (!el) return
     const r   = el.getBoundingClientRect()
     const mx  = clientX - (r.left + r.width / 2)
     const my  = clientY - (r.top  + r.height / 2)
     const cur = vtRef.current
-    const ns  = Math.min(10, Math.max(0.5, cur.scale * factor))
+    let ns    = Math.min(10, Math.max(0.5, cur.scale * factor))
+    // Soft stops at Fit and 100%: passing over a stop, or coming within 6% of it while moving toward it,
+    // settles exactly on it. The stop this gesture started from is skipped so it never pulls you back.
+    for (const st of zoomStops()) {
+      if (st === leavingStop || cur.scale === st) continue
+      const crosses = (cur.scale < st && ns >= st) || (cur.scale > st && ns <= st)
+      const towards = (cur.scale < st && ns > cur.scale) || (cur.scale > st && ns < cur.scale)
+      if (crosses || (towards && Math.abs(ns - st) / st < 0.06)) { ns = st; break }
+    }
+    if (ns === cur.scale) return false
     const ratio = ns / cur.scale
-    setVt({ x: mx - (mx - cur.x) * ratio, y: my - (my - cur.y) * ratio, scale: ns })
-  }, [])
+    const nextVt = { x: mx - (mx - cur.x) * ratio, y: my - (my - cur.y) * ratio, scale: ns }
+    vtRef.current = nextVt // keep in sync immediately so rapid trackpad events build on the latest zoom
+    setVt(nextVt)
+    const onStop = zoomStops().includes(ns)
+    if (onStop) showHud(stopLabel(ns))
+    return onStop
+  }, [showHud, zoomStops, stopLabel])
 
   useEffect(() => {
     const el = ctrRef.current
     if (!el) return
-    const fn = e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.1 : 0.9) }
+    // Zoom by how far the wheel/trackpad actually moved (not a fixed step per event): trackpads send many
+    // tiny events, mouse wheels a few large ones. Pinch on a Mac trackpad arrives as ctrl+wheel with small deltas.
+    // Stops (Fit, 100%) must hold for slow pinches too: those arrive with pauses of 200–300 ms between
+    // events. After a snap the stop holds until input pauses for 400 ms (fingers lifted, momentum over)
+    // and at least 600 ms have passed; leaving it then takes a small deliberate push.
+    let lastEvent = 0
+    let locked = false
+    let snapAt = 0
+    let hold = 0            // accumulated zoom (log units) pushing against a stop
+    let leavingStop = null  // the stop just left; it won't pull the zoom back until we've moved away from it
+    const HOLD = 0.1        // ≈10% zoom-equivalent push needed to leave a stop
+    const fn = e => {
+      e.preventDefault()
+      const now = performance.now()
+      const gap = now - lastEvent
+      lastEvent = now
+      if (locked) {
+        if (gap < 400 || now - snapAt < 600) return // stay until input actually pauses (fingers lifted)
+        locked = false
+        hold = 0
+      }
+      let dy = e.deltaY
+      if (e.deltaMode === 1) dy *= 16       // lines → px
+      else if (e.deltaMode === 2) dy *= 400 // pages → px
+      dy = Math.max(-60, Math.min(60, dy))  // one mouse-wheel notch ≈ 15–20% zoom
+      let u = -dy * (e.ctrlKey ? 0.016 : 0.004) // zoom change in log units (pinch arrives as ctrl+wheel)
+      if (!u) return
+
+      const cur = vtRef.current.scale
+      if (leavingStop && Math.abs(cur - leavingStop) / leavingStop > 0.1) leavingStop = null
+      if (zoomStops().includes(cur)) {
+        hold += u
+        if (Math.abs(hold) < HOLD) return
+        u = hold - Math.sign(hold) * HOLD // continue smoothly from the stop with only the excess
+        hold = 0
+        leavingStop = cur
+      } else hold = 0
+
+      // Trackpads send many tiny events: follow them directly (no easing). Mouse-wheel notches ease.
+      const smallStep = Math.abs(e.deltaY) < 40 && e.deltaMode === 0
+      setWheeling(smallStep)
+      clearTimeout(wheelTimer.current)
+      if (smallStep) wheelTimer.current = setTimeout(() => setWheeling(false), 150)
+
+      if (zoomAt(e.clientX, e.clientY, Math.exp(u), leavingStop)) {
+        locked = true
+        snapAt = now
+        hold = 0
+        leavingStop = null
+        // Ease into the stop rather than jumping to it.
+        clearTimeout(wheelTimer.current)
+        setWheeling(false)
+      }
+    }
     el.addEventListener('wheel', fn, { passive: false })
-    return () => el.removeEventListener('wheel', fn)
-  }, [zoomAt])
+    return () => { el.removeEventListener('wheel', fn); clearTimeout(wheelTimer.current) }
+  }, [zoomAt, zoomStops])
 
   function onMouseDown(e) {
     if (vtRef.current.scale <= 1) return
@@ -296,18 +671,20 @@ function Lightbox({ images, startIndex, onClose }) {
       {!isFS && (
         <div className="flex items-center gap-2 px-3 py-2 border-b border-white/8 flex-shrink-0" style={{ background: 'rgba(10,10,12,0.85)', backdropFilter: 'blur(12px)' }}>
           <span className="text-white/40 text-xs tabular-nums font-mono flex-shrink-0">{index + 1} / {total}</span>
-          <p className="text-white/20 text-[11px] font-mono truncate hidden lg:block min-w-0 flex-1">{current.imageUrl || current.url}</p>
+          <p className="text-white/20 text-[11px] font-mono truncate hidden lg:block min-w-0 flex-1">{current.filename || current.imageUrl || current.url}</p>
 
           {/* Desktop-only controls — hidden on small screens to prevent overflow */}
-          <div className="hidden sm:flex items-center gap-0.5 flex-shrink-0">
-            <TbBtn onClick={() => zoomAt(0,0,0.75)} title="Zoom out (-)"><Ic.ZoomOut /></TbBtn>
-            <span className="text-white/30 text-xs w-10 text-center tabular-nums">{Math.round(vt.scale * 100)}%</span>
-            <TbBtn onClick={() => zoomAt(0,0,1.33)} title="Zoom in (+)"><Ic.ZoomIn /></TbBtn>
+          <div className={`${current.mediaType === 'audio' ? 'hidden' : 'hidden sm:flex'} items-center gap-0.5 flex-shrink-0`}>
+            <TbBtn onClick={() => zoomStep(-1)} title="Zoom out (−)"><Ic.ZoomOut /></TbBtn>
+            <span className="text-white/30 text-xs w-12 text-center tabular-nums" title={nativeScale ? 'Percent of actual size' : undefined}>
+              {vt.scale === 1 ? 'Fit' : `${Math.round((nativeScale ? vt.scale / nativeScale : vt.scale) * 100)}%`}
+            </span>
+            <TbBtn onClick={() => zoomStep(1)} title="Zoom in (+)"><Ic.ZoomIn /></TbBtn>
             <div className="w-px h-4 bg-white/10 mx-1" />
             <TbBtn onClick={() => { resetView(); setRotation(r => (r-90+360)%360) }} title="Rotate left"><Ic.RotateCCW /></TbBtn>
             <TbBtn onClick={() => { resetView(); setRotation(r => (r+90)%360) }} title="Rotate right (R)"><Ic.RotateCW /></TbBtn>
             <div className="w-px h-4 bg-white/10 mx-1" />
-            <TbBtn onClick={() => { resetView(); setRotation(0) }} title="Reset (0)" wide>Reset</TbBtn>
+            <TbBtn onClick={() => { resetView(); setRotation(0) }} title={isMedia ? 'Reset' : 'Reset (0)'} wide>Reset</TbBtn>
             <div className="w-px h-4 bg-white/10 mx-1" />
           </div>
 
@@ -322,9 +699,10 @@ function Lightbox({ images, startIndex, onClose }) {
       {/* Image area */}
       <div ref={ctrRef} className="flex-1 flex items-center justify-center overflow-hidden relative"
         style={{ cursor }}
-        onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
+        onMouseDown={onMouseDown} onMouseMove={e => { onMouseMove(e); pokeControls() }} onMouseUp={onMouseUp}
+        onMouseLeave={e => { onMouseUp(e); clearTimeout(ctlTimer.current); setCtlActive(false) }}
         onClick={onAreaClick}
-        onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+        onTouchStart={e => { onTouchStart(e); pokeControls() }} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
 
         {!isFS && index > 0 && (
           <button onClick={e => { e.stopPropagation(); prev() }}
@@ -333,15 +711,54 @@ function Lightbox({ images, startIndex, onClose }) {
           </button>
         )}
 
-        <img key={current.previewUrl} src={current.previewUrl} alt="" draggable={false}
+        {current.mediaType === 'video' || current.mediaType === 'audio' ? (
+          // Media items play in place; stop events so the image pan/zoom handlers don't intercept the controls.
+          <div onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}
+            onTouchStart={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}
+            style={current.mediaType === 'video' ? {
+              transform: `scale(${vt.scale}) rotate(${rotation}deg)`,
+              transition: wheeling ? 'none' : 'transform 0.15s ease-out',
+            } : undefined}>
+            {current.mediaType === 'video'
+              ? (() => {
+                  // When turned sideways, the video's width runs along the screen's height, so swap the fit limits.
+                  const sideways = rotation % 180 !== 0
+                  const fitW = isFS ? '100vw' : '90vw'
+                  const fitH = isFS ? '100vh' : 'calc(100vh - 120px)' // the control bar overlays the video
+                  return <video ref={mediaRef} key={current.previewUrl} src={current.previewUrl} autoPlay playsInline onLoadedMetadata={measureNative}
+                    onClick={() => { const m = mediaRef.current; if (m) { if (m.paused) m.play().catch(() => {}); else m.pause() } }}
+                    style={{ display: 'block', cursor: 'pointer', maxWidth: sideways ? fitH : fitW, maxHeight: sideways ? fitW : fitH }} />
+                })()
+              : <audio ref={mediaRef} key={current.previewUrl} src={current.previewUrl} controls autoPlay style={{ width: 'min(480px, 90vw)' }} />}
+          </div>
+        ) : <img ref={imgRef} key={current.previewUrl} src={current.previewUrl} alt="" draggable={false} onLoad={measureNative}
           style={{
             maxWidth:  isFS ? '100vw' : '90vw',
             maxHeight: isFS ? '100vh' : 'calc(100vh - 120px)',
             objectFit: 'contain',
             pointerEvents: 'none',
             transform: `translate(${vt.x}px,${vt.y}px) scale(${vt.scale}) rotate(${rotation}deg)`,
-            transition: dragging ? 'none' : 'transform 0.12s ease',
-          }} />
+            transition: dragging || wheeling ? 'none' : 'transform 0.12s ease-out',
+          }} />}
+
+        {current.mediaType === 'video' && <MediaControls mediaRef={mediaRef} src={current.previewUrl} active={ctlActive} />}
+
+        {/* Shortcut feedback badge (top centre, ~0.4 s) */}
+        {hud && (
+          <div key={hud.id} role="status" aria-live="polite"
+            className="absolute top-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium text-white tabular-nums pointer-events-none"
+            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', opacity: hud.hidden ? 0 : 1, transition: 'opacity 0.15s ease' }}>
+            {hud.icon && (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                {hud.icon === 'mute'
+                  ? <><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" /></>
+                  : <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />}
+              </svg>
+            )}
+            {hud.text}
+          </div>
+        )}
 
         {playing && !isFS && (
           <div className="absolute bottom-0 left-0 right-0 h-px bg-white/10 pointer-events-none">
@@ -377,6 +794,7 @@ function Lightbox({ images, startIndex, onClose }) {
       {!isFS && (
         <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/8 flex-shrink-0" style={{ background: 'rgba(10,10,12,0.85)', backdropFilter: 'blur(12px)' }}>
           <div className="flex items-center gap-2">
+            {!isMedia && <>
             <button onClick={() => setPlaying(p => { const next = !p; setFlashIcon(next ? 'play' : 'pause'); return next })}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${playing ? 'bg-violet-600 text-white' : 'bg-white/8 text-white/60 hover:bg-white/12 hover:text-white border border-white/10'}`}>
               {playing ? <Ic.Pause /> : <Ic.Play />}
@@ -387,13 +805,18 @@ function Lightbox({ images, startIndex, onClose }) {
               style={{ colorScheme: 'dark', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.55)', borderColor: 'rgba(255,255,255,0.10)' }}>
               {SPEEDS.map(s => <option key={s} value={s}>{s}s</option>)}
             </select>
+            </>}
             <button onClick={toggleFS} title="Fullscreen (F)"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/8 text-white/60 hover:bg-white/12 hover:text-white border border-white/10 transition-all">
               <Ic.Fullscreen /> Fullscreen
             </button>
           </div>
           <p className="text-white/15 text-[11px] hidden md:block">
-            ← → navigate &nbsp;·&nbsp; Space play/pause &nbsp;·&nbsp; 1–9 speed &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; R rotate &nbsp;·&nbsp; F fullscreen
+            {current.mediaType === 'audio'
+              ? <>Space play/pause &nbsp;·&nbsp; 0–9 jump &nbsp;·&nbsp; ← → 5s &nbsp;·&nbsp; ↑ ↓ volume &nbsp;·&nbsp; M mute &nbsp;·&nbsp; Esc close</>
+              : current.mediaType === 'video'
+              ? <>Space play/pause &nbsp;·&nbsp; 0–9 jump &nbsp;·&nbsp; ← → 5s &nbsp;·&nbsp; ↑ ↓ volume &nbsp;·&nbsp; M mute &nbsp;·&nbsp; + − zoom &nbsp;·&nbsp; Z fit/100% &nbsp;·&nbsp; R rotate &nbsp;·&nbsp; F fullscreen</>
+              : <>← → navigate &nbsp;·&nbsp; Space play/pause &nbsp;·&nbsp; 1–9 speed &nbsp;·&nbsp; + − / scroll zoom &nbsp;·&nbsp; Z fit/100% &nbsp;·&nbsp; R rotate &nbsp;·&nbsp; F fullscreen</>}
           </p>
         </div>
       )}
@@ -403,11 +826,6 @@ function Lightbox({ images, startIndex, onClose }) {
 }
 
 // ─── Mode Chip ────────────────────────────────────────────────────────────────
-const YTDLP_PLATFORM_LABELS = {
-  youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', twitter: 'Twitter/X',
-  x: 'X (Twitter)', vimeo: 'Vimeo', dailymotion: 'Dailymotion', reddit: 'Reddit', facebook: 'Facebook',
-}
-
 function ModeChip({ isSingle, isScanned, isWistia, isYtdlp, isWebPage, urls, parseError, videoCount = 0 }) {
   const t = useT()
   if (!urls.length || parseError) return null
@@ -464,13 +882,15 @@ const PLATFORM_LABELS = { wistia: 'Wistia', youtube: 'YouTube', vimeo: 'Vimeo', 
 const PLATFORM_COLORS = { wistia: '#60a5fa', youtube: '#f87171', vimeo: '#a78bfa', loom: '#34d399', direct: 'var(--text-2)' }
 const CAN_DOWNLOAD    = new Set(['wistia', 'direct'])
 
-function VideoCard({ video }) {
+function VideoCard({ video, savedUrl, onSaved }) {
   const t = useT()
   const [resolving, setResolving]   = useState(false)
   const [resolved, setResolved]     = useState(video.directUrl ? video : null)
   const [err, setErr]               = useState(null)
   const [downloading, setDownloading] = useState(false)
   const [dlProgress, setDlProgress]   = useState(null)
+  // savedUrl/onSaved live in App so a downloaded copy survives switching tabs (cards unmount).
+  const [justReady, setJustReady]     = useState(false)
 
   const label = PLATFORM_LABELS[video.platform] || video.platform
   const color = PLATFORM_COLORS[video.platform] || 'var(--text-2)'
@@ -490,6 +910,8 @@ function VideoCard({ video }) {
 
   async function handleDownload() {
     if (!resolved?.directUrl || downloading) return
+    const filename = `${title || 'video'}.mp4`
+    if (savedUrl) { saveObjectUrl(savedUrl, filename); return }
     setDownloading(true); setDlProgress(null); setErr(null)
     try {
       const res = await fetch(resolved.directUrl)
@@ -508,53 +930,81 @@ function VideoCard({ video }) {
       }
       const blob = new Blob(chunks, { type: 'video/mp4' })
       const objUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = objUrl
-      a.download = `${resolved.title || video.title || 'video'}.mp4`
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(objUrl), 10000)
+      setDownloading(false); setDlProgress(null)
+      // Brief "Ready" moment on the card before the save prompt opens.
+      setJustReady(true)
+      await new Promise(resolve => setTimeout(resolve, 500))
+      setJustReady(false)
+      onSaved?.(objUrl)
+      saveObjectUrl(objUrl, filename)
     } catch (e) { setErr(`Download failed: ${e.message}`) }
     finally { setDownloading(false); setDlProgress(null) }
   }
 
-  const title   = resolved?.title || video.title || null
+  const title   = decodeEntities(resolved?.title || video.title || null)
+  const thumb   = resolved?.thumbnail || video.thumbnail || null
   const dims    = resolved?.width && resolved?.height ? `${resolved.width}×${resolved.height}` : null
   const dur     = resolved?.duration ? `${Math.floor(resolved.duration / 60)}:${String(resolved.duration % 60).padStart(2,'0')}` : null
   const meta    = [dims, dur].filter(Boolean).join(' · ')
 
   return (
-    <div className="flex items-start gap-3 px-4 py-3 border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
-      {/* Platform badge */}
-      <div className="flex-shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: `${color}18`, color }}>
-        {label}
-      </div>
+    <div className="relative overflow-hidden flex items-center gap-3 px-4 py-3 border-b last:border-0" aria-busy={downloading || undefined}
+      style={{ borderColor: 'var(--border)' }}>
+      <VideoThumb key={thumb || 'none'} src={thumb} size="lg" saveLabel={t('tip_save_thumbnail')}
+        onSave={() => saveThumbnail(thumb.replace(/\?image_crop_resized=[^&]*$/, ''), title)} />
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>
-          {title || (video.wistiaHash ? `Wistia ${video.wistiaHash}` : video.url)}
+        <p className="flex items-center gap-1.5 text-[13px] font-semibold leading-tight" style={{ color: 'var(--text-1)' }}>
+          <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: `${color}18`, color }}>
+            {label}
+          </span>
+          <span className="truncate">{title || (video.wistiaHash ? `Wistia ${video.wistiaHash}` : video.url)}</span>
         </p>
-        {meta && <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{meta}</p>}
+        {downloading ? (
+          <p className="flex items-center gap-1.5 text-[11px] mt-0.5" role="status" aria-live="polite" style={{ color: 'var(--text-2)' }}>
+            <span className="media-dl-dot" />
+            {dlProgress === null ? t('status_preparing') : t('status_media_downloading')}
+            {dlProgress !== null && <span className="tabular-nums" style={{ color: 'var(--text-1)' }}>· {dlProgress}%</span>}
+          </p>
+        ) : justReady ? (
+          <p className="text-[11px] mt-0.5" role="status" style={{ color: '#10b981' }}>{t('status_ready_to_save')}</p>
+        ) : (meta || savedUrl) && (
+          <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+            {savedUrl && <span style={{ color: '#10b981' }}>✓ {t('status_downloaded')}{meta ? ' · ' : ''}</span>}
+            {meta}
+          </p>
+        )}
         {err && <p className="text-[11px] mt-0.5 text-rose-400">{err}</p>}
       </div>
+
+      {/* Progress along the card's bottom edge */}
+      {(downloading || justReady) && (
+        <div className="absolute left-0 right-0 bottom-0 h-[2px]" style={{ background: 'var(--border)' }}>
+          {downloading && dlProgress === null
+            ? <div className="media-dl-indeterminate" />
+            : <div className="h-full transition-all duration-300"
+                style={{ width: `${justReady ? 100 : dlProgress}%`, background: justReady ? '#10b981' : 'var(--violet)' }} />}
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex-shrink-0 flex flex-col gap-1.5">
         {canDownload && resolved?.directUrl ? (
           <>
             {/* Preview — streams in new tab */}
-            <a href={resolved.directUrl} target="_blank" rel="noopener noreferrer"
-              className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-opacity hover:opacity-80"
+            <a href={savedUrl || resolved.directUrl} target="_blank" rel="noopener noreferrer"
+              className="w-28 flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-opacity hover:opacity-80"
               style={{ borderColor: 'var(--border-2)', color: 'var(--text-2)' }}>
               {t('card_preview')}
             </a>
             {/* Download — fetches directly from CDN in-browser, saves as .mp4 */}
-            <button onClick={handleDownload} disabled={downloading}
-              className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
-              style={{ background: 'var(--gradient-button)', minWidth: '80px' }}>
-              {downloading
-                ? (dlProgress !== null ? `${dlProgress}%` : t('card_downloading'))
-                : <><Ic.Download /> {t('card_download')}</>}
+            <button onClick={handleDownload} disabled={downloading || justReady}
+              className="w-28 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-white whitespace-nowrap transition-opacity hover:opacity-90 disabled:opacity-50 disabled:saturate-50 disabled:cursor-not-allowed"
+              style={{ background: 'var(--gradient-button)' }}>
+              {downloading || justReady
+                ? <><span className="media-dl-spinner" style={{ width: 11, height: 11 }} />{t('card_downloading')}</>
+                : <><Ic.Download /> {savedUrl ? t('card_save') : t('card_download')}</>}
             </button>
           </>
         ) : canDownload && video.wistiaHash ? (
@@ -578,13 +1028,13 @@ function VideoCard({ video }) {
 // ─── Result Item ──────────────────────────────────────────────────────────────
 function ResultItem({ status, onPreview }) {
   const [copied, setCopied] = useState(false)
-  const filename = getFilenameFromUrl(status.imageUrl || status.url, 0)
+  const filename = (status.filename || getFilenameFromUrl(status.imageUrl || status.url, 0))
     .replace(/\.[^.]+$/, '') // strip extension for display
     || status.url.split('/').pop()
 
   async function copy(e) {
     e.stopPropagation()
-    try { await navigator.clipboard.writeText(status.url); setCopied(true); setTimeout(() => setCopied(false), 1400) } catch {}
+    try { await navigator.clipboard.writeText(status.url); setCopied(true); setTimeout(() => setCopied(false), 1400) } catch { /* Clipboard access may be unavailable or denied. */ }
   }
 
   return (
@@ -651,36 +1101,32 @@ function UrlActionBtn({ template, onPaste, disabled }) {
       await navigator.clipboard.writeText(template)
       setCopied(true)
       setTimeout(() => setCopied(false), 1400)
-    } catch {}
-  }
-
-  const btnStyle = {
-    borderColor: 'var(--border)',
-    color: copied ? '#10b981' : 'var(--text-2)',
-    background: 'var(--surface)',
+    } catch { /* Clipboard access may be unavailable or denied. */ }
   }
 
   if (template) {
     return (
       <button onClick={handleCopy} disabled={disabled}
-        title={copied ? 'Copied!' : t('btn_copy')}
-        className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        aria-label={copied ? 'Copied!' : t('btn_copy')}
+        className="tip-host flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ color: copied ? '#10b981' : 'var(--text-3)' }}
         onMouseEnter={e => { if (!copied) e.currentTarget.style.color = 'var(--violet)' }}
         onMouseLeave={e => { if (!copied) e.currentTarget.style.color = 'var(--text-3)' }}>
         {copied ? <Ic.Check /> : <Ic.Copy />}
+        <span role="tooltip" className="tip">{copied ? 'Copied!' : t('btn_copy')}</span>
       </button>
     )
   }
 
   return (
     <button onClick={onPaste} disabled={disabled}
-      title={t('btn_paste')}
-      className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      aria-label={t('btn_paste')}
+      className="tip-host flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       style={{ color: 'var(--text-3)' }}
       onMouseEnter={e => e.currentTarget.style.color = 'var(--violet)'}
       onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
       <Ic.Clipboard />
+      <span role="tooltip" className="tip">{t('btn_paste')}</span>
     </button>
   )
 }
@@ -918,70 +1364,6 @@ function DownloadConfirmModal({ onConfirm, onCancel }) {
   )
 }
 
-function LegalDisclaimer() {
-  const t = useT()
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)', background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
-      <button onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-5 py-4 text-left transition-colors"
-        style={{ color: 'var(--text-2)' }}
-        onMouseEnter={e => e.currentTarget.style.color = 'var(--text-1)'}
-        onMouseLeave={e => e.currentTarget.style.color = 'var(--text-2)'}>
-        <div className="flex items-center gap-2.5">
-          <span style={{ color: 'var(--violet)', opacity: 0.7 }}><Ic.Lock /></span>
-          <span className="font-semibold text-[13px] tracking-wide">{t('legal_header')}</span>
-        </div>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className="w-4 h-4 flex-shrink-0 transition-transform duration-200"
-          style={{ transform: open ? 'rotate(180deg)' : 'none' }}>
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-      </button>
-      {open && (
-        <div className="px-5 pb-5 space-y-3 leading-relaxed border-t text-[12px]" style={{ borderColor: 'var(--border)', color: 'var(--text-2)' }}>
-          <div className="pt-3 text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-3)' }}>Last updated: May 2026</div>
-
-          <section>
-            <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>1. User Responsibility</p>
-            <p>By using this tool, you acknowledge and agree that you are solely responsible for ensuring that you have all appropriate rights, licenses, authorizations, or permissions before downloading, reproducing, distributing, or otherwise using any content obtained through this service, particularly for commercial purposes.</p>
-          </section>
-
-          <section>
-            <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>2. No Verification of Rights</p>
-            <p>This platform does not verify, validate, or confirm the ownership, copyright status, licensing terms, or usage rights of any third-party content accessible through this service. The technical capability to access or download a file does not imply that you are legally entitled to do so. Availability through this tool is not a representation that any content is free, public domain, or licensed for reuse.</p>
-          </section>
-
-          <section>
-            <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>3. Copyright & Intellectual Property</p>
-            <p>A significant portion of content available online is protected by copyright, trademark, and other intellectual property laws. Downloading, reproducing, or distributing protected material without authorization from the rights holder may constitute infringement and may expose you to civil liability or criminal penalties. Commercial use of third-party content typically requires explicit licensing from the rights holder.</p>
-          </section>
-
-          <section>
-            <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>4. Limitation of Liability</p>
-            <p>This platform and its operators expressly disclaim all liability for any misuse, copyright infringement, violation of third-party terms of service, unauthorized distribution, or any other unlawful use of content downloaded through this service. The tool is provided "as is," without warranties of any kind, express or implied. Use is entirely at your own risk.</p>
-          </section>
-
-          <section>
-            <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>5. Third-Party Terms of Service</p>
-            <p>Many websites and platforms prohibit automated access, scraping, or downloading of their content through their Terms of Service. You are solely responsible for reviewing and complying with the applicable terms of service of any website or platform from which you download content using this tool.</p>
-          </section>
-
-          <section>
-            <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>6. DMCA Compliance</p>
-            <p>This service respects intellectual property rights and operates in compliance with the Digital Millennium Copyright Act (DMCA) and other applicable copyright laws. This tool does not circumvent any technical protection measures (DRM). Content that is not publicly accessible without authentication cannot be downloaded through this service.</p>
-          </section>
-
-          <section>
-            <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>7. Permitted Use</p>
-            <p>This tool is intended for lawful purposes including accessing content you own or have the right to use, downloading freely licensed or public domain material, personal archiving of legally accessible content, and academic or research use consistent with applicable fair use or fair dealing provisions. These exceptions are narrow and do not constitute general authorization to download protected content.</p>
-          </section>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ─── Feedback Modal ───────────────────────────────────────────────────────────
 function FeedbackModal({ onClose }) {
   const [state, handleSubmit] = useForm('xykvgyrw')
@@ -1060,22 +1442,6 @@ function FeedbackModal({ onClose }) {
   )
 }
 
-function FeedbackPanel({ onOpen }) {
-  return (
-    <section className="feedback-panel">
-      <div>
-        <p className="eyebrow">Help us improve</p>
-        <h2>Shape the next version</h2>
-        <p>
-          Tell us what felt confusing, what source failed, or which download workflow should feel faster.
-        </p>
-      </div>
-      <button onClick={onOpen} className="secondary-action">
-        Send feedback
-      </button>
-    </section>
-  )
-}
 
 // ─── Language Picker ──────────────────────────────────────────────────────────
 function LanguagePicker({ lang, setLang }) {
@@ -1139,15 +1505,13 @@ function Tooltip({ content, children }) {
 }
 
 // ─── App ──────────────────────────────────────────────────────────────────────
-const MAX_PREV = 3
-
 export default function App() {
   const [dark, setDark] = useState(() => {
     try { return localStorage.getItem('theme') === 'dark' } catch { return false }
   })
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark)
-    try { localStorage.setItem('theme', dark ? 'dark' : 'light') } catch {}
+    try { localStorage.setItem('theme', dark ? 'dark' : 'light') } catch { /* Theme preference persistence is optional. */ }
   }, [dark])
 
   useEffect(() => {
@@ -1198,14 +1562,14 @@ export default function App() {
       return LANGUAGES[browser] ? browser : 'en'
     } catch { return 'en' }
   })
-  useEffect(() => { try { localStorage.setItem('lang', lang) } catch {} }, [lang])
+  useEffect(() => { try { localStorage.setItem('lang', lang) } catch { /* Language preference persistence is optional. */ } }, [lang])
   const t = useMemo(() => makeT(lang), [lang])
 
   const [autoSave, setAutoSave] = useState(() => {
     try { return localStorage.getItem('autoSave') !== 'false' } catch { return true }
   })
   useEffect(() => {
-    try { localStorage.setItem('autoSave', autoSave) } catch {}
+    try { localStorage.setItem('autoSave', autoSave) } catch { /* Auto-save preference persistence is optional. */ }
   }, [autoSave])
 
   const [template, setTemplate]     = useState('')
@@ -1231,6 +1595,10 @@ export default function App() {
   const [statuses, setStatuses]     = useState([])
   const [done, setDone]             = useState(0)
   const [zipPct, setZipPct]         = useState(null)
+  const [savedVideos, setSavedVideos] = useState({}) // scanned video key → in-memory object URL
+  const [ytdlpResult, setYtdlpResult] = useState(null) // downloaded YouTube file kept in memory: { key, previewUrl, filename, mediaType }
+  const [ytPreviewOpen, setYtPreviewOpen] = useState(false)
+  const [mediaProgress, setMediaProgress] = useState(null) // YouTube: { stage: 'preparing' | 'receiving', pct }
   const [lbIdx, setLbIdx]           = useState(null)
   const phCurRef            = useRef(0)
   const [phCur, setPhCur]   = useState(0)
@@ -1242,7 +1610,7 @@ export default function App() {
     t('ph_pdf'),
   ]
   useEffect(() => {
-    if (template) { setPhPrev(null); return }
+    if (template) return
     let t1
     const id = setInterval(() => {
       // Phase 1: exit current text (show exit animation only)
@@ -1260,8 +1628,6 @@ export default function App() {
 
   // Auto-fetch video info when a yt-dlp platform URL is detected (debounced 600ms)
   useEffect(() => {
-    setYtdlpInfo(null)
-    setYtdlpLoading(false)
     if (!isYtdlp || !urls[0]) return
     const ctrl = new AbortController()
     const timer = setTimeout(async () => {
@@ -1271,7 +1637,8 @@ export default function App() {
         const ct  = res.headers.get('content-type') || ''
         if (!ct.includes('application/json')) return // API not available locally — silent fallback
         const data = await res.json()
-        if (data.error || ctrl.signal.aborted) return
+        if (ctrl.signal.aborted) return
+        if (data.error) { setScanError(data.error); return } // e.g. the platform blocks this server
         setYtdlpInfo(data)
         if (data.video_formats?.length) setYtdlpQuality(data.video_formats[0].key)
         if (data.audio_formats?.length) setYtdlpAudioFmt(data.audio_formats[0].key)
@@ -1279,10 +1646,11 @@ export default function App() {
       finally { if (!ctrl.signal.aborted) setYtdlpLoading(false) }
     }, 600)
     return () => { clearTimeout(timer); ctrl.abort() }
-  }, [isYtdlp, template])
+  }, [isYtdlp, template, urls])
 
   const abortRef   = useRef(null)
   const objUrlsRef = useRef([])
+  const pendingExtractRef = useRef(false) // Enter pressed on a video link before its info loaded
 
   const WISTIA_URL_RE    = /wistia\.com\/(?:embed\/medias|medias)\/([a-zA-Z0-9]+)/
   const YTDLP_URL_RE     = /(?:youtube\.com\/(?:watch|shorts)|youtu\.be\/|tiktok\.com\/@.+\/video|instagram\.com\/(?:reel|p|tv)\/|(?:twitter|x)\.com\/.+\/status\/|vimeo\.com\/\d|dailymotion\.com\/video\/|reddit\.com\/.+\/comments\/|facebook\.com\/.+\/video|fb\.watch\/)/i
@@ -1292,13 +1660,17 @@ export default function App() {
 
   const onInput = useCallback((value) => {
     setTemplate(value)
+    setPhPrev(null)
+    setYtdlpLoading(false)
+    setYtdlpInfo(null)
+    setYtdlpResult(null)
+    pendingExtractRef.current = false
     setScanError(null)
     setIsScanned(false)
-    setScannedVideos([])
+    setScannedVideos([]); setSavedVideos({})
     setScannedImages([])
     setScannedFiles([])
     setActiveTab('quality')
-    setYtdlpInfo(null)
     const { error, urls: parsed, single } = parseUrlTemplate(value)
     setParseError(error)
     setUrls(parsed)
@@ -1313,7 +1685,7 @@ export default function App() {
   }, [])
 
   const onPaste = useCallback(async () => {
-    try { const t = await navigator.clipboard.readText(); if (t) onInput(t.trim()) } catch {}
+    try { const t = await navigator.clipboard.readText(); if (t) onInput(t.trim()) } catch { /* Clipboard access may be unavailable or denied. */ }
   }, [onInput])
 
   const onScan = useCallback(async () => {
@@ -1362,7 +1734,24 @@ export default function App() {
   const onExtract = useCallback(async () => {
     if (!legalConfirmedRef.current) { setPendingLegalAction('download'); return }
     if (!urls[0] || phase !== 'idle') return
-    setPhase('scanning'); setScanError(null)
+    const resultKey = ytdlpMode === 'audio' ? `audio|${ytdlpAudioFmt}` : `video|${ytdlpQuality}`
+    if (ytdlpResult?.key === resultKey) { saveObjectUrl(ytdlpResult.previewUrl, ytdlpResult.filename); return }
+    setScanError(null)
+    const ctrl = new AbortController(); abortRef.current = ctrl
+    setPhase('fetching'); setStatuses([]); setDone(0)
+    // Until the file starts arriving the bar is an estimate: "Preparing…" (no percentage) for the
+    // first 2 s, then "Downloading…" on a curve that is quick early and keeps slowing toward 95%.
+    const startedAt = Date.now()
+    const estimatePct = secs => secs < 2 ? 0 : 95 - 90 * Math.exp(-(secs - 2) / 12)
+    let prepPct = 0
+    setMediaProgress({ stage: 'preparing', pct: 0, slow: false })
+    const prepTimer = setInterval(() => {
+      const secs = (Date.now() - startedAt) / 1000
+      prepPct = estimatePct(secs)
+      setMediaProgress(p => (p && p.stage !== 'receiving' && p.stage !== 'ready'
+        ? { stage: secs < 2 ? 'preparing' : 'downloading', pct: prepPct, slow: secs >= 15 }
+        : p))
+    }, 200)
     try {
       const qs = new URLSearchParams({
         url: urls[0],
@@ -1370,17 +1759,11 @@ export default function App() {
         quality: ytdlpQuality,
         audio_fmt: ytdlpAudioFmt,
       })
-      const res = await fetch(`/api/extract?${qs}`)
+      const res = await fetch(`/api/extract?${qs}`, { signal: ctrl.signal })
       const ct = res.headers.get('content-type') || ''
-      if (!ct.includes('application/json')) {
-        setScanError(t('err_unavailable'))
-        setPhase('idle'); return
-      }
+      if (!ct.includes('application/json')) throw new Error(t('err_unavailable'))
       const data = await res.json()
-      if (!res.ok || data.error) {
-        setScanError(data.error || 'Extraction failed')
-        setPhase('idle'); return
-      }
+      if (!res.ok || data.error) throw new Error(data.error || 'Extraction failed')
       // ytdlpInfo already has the card — no separate meta state needed
 
       const ext      = data.ext || (ytdlpMode === 'audio' ? 'm4a' : 'mp4')
@@ -1393,6 +1776,7 @@ export default function App() {
 
       if (!isYoutube) {
         // Direct browser download — works for TikTok, Vimeo, Dailymotion, Reddit, etc.
+        clearInterval(prepTimer); setMediaProgress(null)
         setPhase('done')
         const a = document.createElement('a')
         a.href = data.url
@@ -1405,25 +1789,60 @@ export default function App() {
         return
       }
 
-      // YouTube: proxy through Vercel — same server IP as extraction, but limited to ~45s / ~50MB
-      const proxyUrl = `/api/proxy?url=${encodeURIComponent(data.url)}`
-      const ctrl = new AbortController(); abortRef.current = ctrl
-      setPhase('fetching'); setStatuses([]); setDone(0)
-      const r = await fetch(proxyUrl, { signal: ctrl.signal })
-      if (!r.ok) throw new Error(`YouTube download failed (${r.status}). Large videos may exceed server limits — try a lower quality.`)
-      const blob = await r.blob()
+      // YouTube: proxy through Vercel — same server IP as extraction, but limited to ~45s / ~50MB.
+      // The local Express server instead returns merge_path, which streams a merged video + audio MP4.
+      const proxyUrl = data.merge_path || `/api/proxy?url=${encodeURIComponent(data.url)}`
+      let r
+      try { r = await fetch(proxyUrl, { signal: ctrl.signal }) }
+      finally { clearInterval(prepTimer) }
+      if (!r.ok) {
+        const errBody = (r.headers.get('content-type') || '').includes('application/json') ? await r.json().catch(() => null) : null
+        throw new Error(errBody?.error || `YouTube download failed (${r.status}). Large videos may exceed server limits — try a lower quality.`)
+      }
+      const total = parseInt(r.headers.get('Content-Length') || '', 10)
+      const base = prepPct
+      const slow = (Date.now() - startedAt) / 1000 >= 15
+      setMediaProgress({ stage: 'receiving', pct: base, slow })
+      const reader = r.body.getReader()
+      const chunks = []
+      let received = 0
+      while (true) {
+        const { done: finished, value } = await reader.read()
+        if (finished) break
+        chunks.push(value)
+        received += value.length
+        if (total > 0) setMediaProgress({ stage: 'receiving', pct: base + (100 - base) * (received / total), slow })
+      }
+      // Brief "Ready" moment so the save prompt feels like the next step, not a surprise.
+      setMediaProgress({ stage: 'ready', pct: 100, slow: false })
+      await new Promise(resolve => setTimeout(resolve, 500))
+      const blob = new Blob(chunks, { type: r.headers.get('Content-Type') || (ytdlpMode === 'audio' ? 'audio/mp4' : 'video/mp4') })
       if (ctrl.signal.aborted) return
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = filename
-      a.click()
-      setTimeout(() => URL.revokeObjectURL(a.href), 5000)
-      setPhase('done')
+      // Keep the file in memory (like scanned images) so it can be previewed and saved again.
+      const previewUrl = URL.createObjectURL(blob)
+      objUrlsRef.current.push(previewUrl)
+      saveObjectUrl(previewUrl, filename)
+      // The result stays on the video card (Downloaded · Preview · Save) rather than the batch Downloads list.
+      setYtdlpResult({ key: resultKey, previewUrl, filename, mediaType: ytdlpMode === 'audio' ? 'audio' : 'video' })
+      setMediaProgress(null)
+      setPhase('idle')
     } catch (e) {
       if (!abortRef.current?.signal.aborted) setScanError(e.message || 'Extraction failed')
+      setMediaProgress(null)
       setPhase('idle')
+    } finally {
+      clearInterval(prepTimer)
     }
-  }, [urls, phase, ytdlpMode, ytdlpQuality, ytdlpAudioFmt])
+  }, [urls, phase, ytdlpMode, ytdlpQuality, ytdlpAudioFmt, ytdlpResult])
+
+  // Start a download that Enter queued while the video info was still loading.
+  const prevYtdlpLoading = useRef(false)
+  useEffect(() => {
+    const finishedLoading = prevYtdlpLoading.current && !ytdlpLoading
+    prevYtdlpLoading.current = ytdlpLoading
+    if (!pendingExtractRef.current || !isYtdlp || phase !== 'idle') return
+    if (ytdlpInfo || finishedLoading) { pendingExtractRef.current = false; onExtract() }
+  }, [ytdlpInfo, ytdlpLoading, isYtdlp, phase, onExtract])
 
   const onDownload = useCallback(async () => {
     if (!legalConfirmedRef.current) { setPendingLegalAction('download'); return }
@@ -1495,12 +1914,12 @@ export default function App() {
     setPhase('done')
   }, [statuses, phase])
 
-  const onCancel = useCallback(() => { abortRef.current?.abort(); setPhase('idle') }, [])
+  const onCancel = useCallback(() => { abortRef.current?.abort(); setMediaProgress(null); setPhase('idle') }, [])
   const onClear  = useCallback(() => {
     abortRef.current?.abort()
     objUrlsRef.current.forEach(u => URL.revokeObjectURL(u)); objUrlsRef.current = []
     setTemplate(''); setUrls([]); setParseError(null); setScanError(null)
-    setIsSingle(false); setIsScanned(false); setIsWistia(false); setIsWebPage(false); setIsYtdlp(false); setYtdlpInfo(null); setYtdlpLoading(false); setScannedVideos([])
+    setIsSingle(false); setIsScanned(false); setIsWistia(false); setIsWebPage(false); setIsYtdlp(false); setYtdlpInfo(null); setYtdlpResult(null); setYtdlpLoading(false); setScannedVideos([]); setSavedVideos({})
     setScannedImages([]); setScannedFiles([]); setActiveTab('quality')
     setPhase('idle'); setStatuses([]); setDone(0); setZipPct(null); setLbIdx(null)
   }, [])
@@ -1521,13 +1940,21 @@ export default function App() {
     : urls
 
   const pct      = displayUrls.length > 0 ? Math.round((done / displayUrls.length) * 100) : 0
-
-  const previewList = urls.length <= MAX_PREV + 1
-    ? urls : [...urls.slice(0, MAX_PREV), null, urls[urls.length - 1]]
+  // YouTube/yt-dlp downloads show their progress inside the video info card instead of the generic block.
+  const inCardProgress = isYtdlp && !!mediaProgress && !!ytdlpInfo
+  const ytdlpSelectionKey = ytdlpMode === 'audio' ? `audio|${ytdlpAudioFmt}` : `video|${ytdlpQuality}`
+  const ytdlpSaved = ytdlpResult?.key === ytdlpSelectionKey ? ytdlpResult : null
+  const busyPct  = mediaProgress ? Math.min(100, Math.round(mediaProgress.pct))
+                 : phase === 'zipping' ? (zipPct ?? 0) : pct
+  const busyLabel = mediaProgress
+    ? (mediaProgress.stage === 'preparing' ? t('status_preparing')
+      : mediaProgress.stage === 'ready' ? t('status_ready_to_save')
+      : t('status_media_downloading'))
+    : phase === 'zipping' ? t('status_packaging') : t('status_downloading', { done, total: displayUrls.length })
 
   // Legal confirmation handler
   const handleLegalConfirm = () => {
-    try { localStorage.setItem('idone_legal', '1') } catch {}
+    try { localStorage.setItem('idone_legal', '1') } catch { /* Legal confirmation persistence is optional. */ }
     legalConfirmedRef.current = true
     const action = pendingLegalAction
     setPendingLegalAction(null)
@@ -1556,6 +1983,9 @@ export default function App() {
     <div className="app-shell min-h-screen transition-colors duration-200">
 
       {/* Lightbox */}
+      {ytPreviewOpen && ytdlpResult && (
+        <Lightbox images={[ytdlpResult]} startIndex={0} onClose={() => setYtPreviewOpen(false)} />
+      )}
       {lbIdx !== null && previews.length > 0 && (
         <Lightbox images={previews} startIndex={Math.min(lbIdx, previews.length - 1)} onClose={() => setLbIdx(null)} />
       )}
@@ -1647,8 +2077,14 @@ export default function App() {
                       if (e.key === 'Enter') {
                         e.preventDefault()
                         if (!urls.length || !!parseError || isBusy || phase === 'scanning') return
-                        if (phase === 'done' && ok > 0) onSaveAgain()
-                        else if (phase === 'idle') onDownload()
+                        if (phase === 'done' && ok > 0) { onSaveAgain(); return }
+                        if (phase !== 'idle') return
+                        if (isYtdlp) {
+                          // Video link: same as "Download Video". If its info is still loading, start once it arrives.
+                          if (!ytdlpInfo) pendingExtractRef.current = true
+                          else onExtract()
+                        } else if (isSingle && !isScanned && isWebPage) onScan()
+                        else onDownload()
                         return
                       }
                       // Smart bracket auto-complete: [ → [existing-content|] before next . or /
@@ -1686,13 +2122,14 @@ export default function App() {
                   </div>{/* end animated placeholder wrapper */}
                   {template && !isBusy && phase !== 'scanning' && (
                     <button
-                      onClick={() => onInput('')}
-                      title="Clear URL"
-                      className="flex items-center justify-center w-8 flex-shrink-0 transition-colors"
+                      onClick={onClear}
+                      aria-label={t('tip_clear_url')}
+                      className="tip-host flex items-center justify-center w-8 h-8 flex-shrink-0 transition-colors"
                       style={{ color: 'var(--text-3)' }}
                       onMouseEnter={e => e.currentTarget.style.color = 'var(--text-1)'}
                       onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
                       <Ic.Close cls="w-3.5 h-3.5" />
+                      <span role="tooltip" className="tip">{t('tip_clear_url')}</span>
                     </button>
                   )}
                   <UrlActionBtn
@@ -1747,7 +2184,11 @@ export default function App() {
               {/* Videos tab content — inline in main card */}
               {isScanned && activeTab === 'videos' && scannedVideos.length > 0 && (
                 <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'var(--border)' }}>
-                  {scannedVideos.map((v, i) => <VideoCard key={i} video={v} />)}
+                  {scannedVideos.map((v, i) => {
+                    const vKey = v.wistiaHash || v.directUrl || v.url || String(i)
+                    return <VideoCard key={vKey} video={v} savedUrl={savedVideos[vKey]}
+                      onSaved={objUrl => { objUrlsRef.current.push(objUrl); setSavedVideos(p => ({ ...p, [vKey]: objUrl })) }} />
+                  })}
                 </div>
               )}
 
@@ -1783,20 +2224,29 @@ export default function App() {
               )}
 
               {/* Download progress */}
-              {isBusy && (
+              {isBusy && !inCardProgress && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs" style={{ color: 'var(--text-2)' }}>
-                      {phase === 'zipping' ? t('status_packaging') : t('status_downloading', { done, total: displayUrls.length })}
+                    <span className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-2)' }}>
+                      {mediaProgress && <span className="media-dl-dot" />}
+                      {busyLabel}
                     </span>
-                    <span className="text-xs tabular-nums font-medium" style={{ color: 'var(--text-1)' }}>
-                      {phase === 'zipping' ? `${zipPct ?? 0}%` : `${pct}%`}
-                    </span>
+                    {mediaProgress?.stage !== 'preparing' && (
+                      <span className="text-xs tabular-nums font-medium" style={{ color: 'var(--text-1)' }}>
+                        {`${busyPct}%`}
+                      </span>
+                    )}
                   </div>
-                  <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
-                    <div className="h-full rounded-full transition-all duration-150"
-                      style={{ width: `${phase === 'zipping' ? (zipPct ?? 0) : pct}%`, background: 'var(--violet)' }} />
+                  <div className="relative h-1 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                    {mediaProgress?.stage === 'preparing'
+                      ? <div className="media-dl-indeterminate" />
+                      : <div className="h-full rounded-full transition-all duration-300"
+                          style={{ width: `${busyPct}%`, background: 'var(--violet)' }} />}
+                    {mediaProgress && mediaProgress.stage !== 'ready' && mediaProgress.stage !== 'preparing' && <div className="media-dl-shimmer" />}
                   </div>
+                  {mediaProgress?.slow && (
+                    <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{t('status_slow_hint')}</p>
+                  )}
                 </div>
               )}
 
@@ -1846,11 +2296,12 @@ export default function App() {
                 )}
 
                 {/* ── Phase: busy — show progress in button ── */}
-                {isBusy && (
-                  <button disabled
-                    className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white opacity-80 cursor-not-allowed"
+                {isBusy && !inCardProgress && (
+                  <button disabled aria-busy="true"
+                    className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white opacity-50 saturate-50 cursor-not-allowed"
                     style={{ background: 'var(--gradient-button)' }}>
-                    {phase === 'zipping' ? t('status_packaging') : t('status_downloading', { done, total: displayUrls.length })}
+                    {mediaProgress && mediaProgress.stage !== 'ready' && <span className="media-dl-spinner" />}
+                    {busyLabel}
                   </button>
                 )}
 
@@ -1866,29 +2317,58 @@ export default function App() {
                 )}
 
                 {/* ── Phase: idle — yt-dlp platform (YouTube, TikTok, etc.) ── */}
-                {phase === 'idle' && isYtdlp && urls.length > 0 && !parseError && (
+                {(phase === 'idle' || inCardProgress) && isYtdlp && urls.length > 0 && !parseError && (
                   <div className="space-y-2.5">
 
                     {/* Video info card — shown once fetched */}
                     {ytdlpInfo && (
-                      <div className="flex items-center gap-3 p-3 rounded-xl border"
-                        style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}>
-                        {ytdlpInfo.thumbnail && (
-                          <img src={ytdlpInfo.thumbnail} alt=""
-                            className="w-16 h-11 rounded-lg object-cover flex-shrink-0"
-                            onError={e => e.currentTarget.style.display='none'} />
-                        )}
+                      <div className="relative overflow-hidden flex items-center gap-3 p-3 rounded-xl border"
+                        aria-busy={inCardProgress || undefined}
+                        style={{ background: 'var(--bg)', borderColor: inCardProgress ? 'var(--border-2)' : 'var(--border)' }}>
+                        <VideoThumb key={ytdlpInfo.thumbnail || 'none'} src={ytdlpInfo.thumbnail} size="lg"
+                          saveLabel={t('tip_save_thumbnail')} onSave={() => saveThumbnail(ytdlpInfo.platform === 'youtube' ? youtubeThumbCandidates(urls[0], ytdlpInfo.thumbnail) : ytdlpInfo.thumbnail, ytdlpInfo.title)} />
                         <div className="min-w-0 flex-1">
                           <p className="text-[13px] font-semibold leading-tight truncate" style={{ color: 'var(--text-1)' }}>
                             {ytdlpInfo.title}
                           </p>
-                          {ytdlpInfo.uploader && (
+                          {inCardProgress ? (
+                            <>
+                              <p className="flex items-center gap-1.5 text-[11px] mt-0.5 truncate" role="status" aria-live="polite"
+                                style={{ color: mediaProgress.stage === 'ready' ? '#10b981' : 'var(--text-2)' }}>
+                                {mediaProgress.stage !== 'ready' && <span className="media-dl-dot" />}
+                                {busyLabel}
+                                {(mediaProgress.stage === 'downloading' || mediaProgress.stage === 'receiving') && (
+                                  <span className="tabular-nums" style={{ color: 'var(--text-1)' }}>· {busyPct}%</span>
+                                )}
+                              </p>
+                              {mediaProgress.slow && (
+                                <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--text-3)' }}>{t('status_slow_hint')}</p>
+                              )}
+                            </>
+                          ) : (ytdlpInfo.uploader || ytdlpSaved) && (
                             <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-3)' }}>
+                              {ytdlpSaved && <span style={{ color: '#10b981' }}>✓ {t('status_downloaded')}{ytdlpInfo.uploader ? ' · ' : ''}</span>}
                               {ytdlpInfo.uploader}
                               {ytdlpInfo.duration && ` · ${Math.floor(ytdlpInfo.duration/60)}:${String(ytdlpInfo.duration%60).padStart(2,'0')}`}
                             </p>
                           )}
                         </div>
+                        {ytdlpSaved && !inCardProgress && (
+                          <button onClick={() => setYtPreviewOpen(true)}
+                            className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-opacity hover:opacity-80"
+                            style={{ borderColor: 'var(--border-2)', color: 'var(--text-2)' }}>
+                            <Ic.Eye /> {t('card_preview').replace(/\s*↗$/, '')}
+                          </button>
+                        )}
+                        {/* Progress along the card's bottom edge */}
+                        {inCardProgress && (
+                          <div className="absolute left-0 right-0 bottom-0 h-[2px]" style={{ background: 'var(--border)' }}>
+                            {mediaProgress.stage === 'preparing'
+                              ? <div className="media-dl-indeterminate" />
+                              : <div className="h-full transition-all duration-300"
+                                  style={{ width: `${busyPct}%`, background: mediaProgress.stage === 'ready' ? '#10b981' : 'var(--violet)' }} />}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1899,7 +2379,7 @@ export default function App() {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                         </svg>
-                        <span className="text-[12px]" style={{ color: 'var(--text-3)' }}>Fetching video info…</span>
+                        <span className="text-[12px]" style={{ color: 'var(--text-3)' }}>{t('status_fetching_info')}</span>
                       </div>
                     )}
 
@@ -1907,8 +2387,8 @@ export default function App() {
                     <div className="flex flex-wrap items-center gap-1.5">
                       {/* Video / Audio mode */}
                       {[{ id: 'video', label: '🎬 Video' }, { id: 'audio', label: '🎵 Audio' }].map(({ id, label }) => (
-                        <button key={id} onClick={() => setYtdlpMode(id)}
-                          className="rounded-full px-2.5 py-1 text-[11px] font-semibold border transition-all"
+                        <button key={id} onClick={() => setYtdlpMode(id)} disabled={inCardProgress}
+                          className="rounded-full px-2.5 py-1 text-[11px] font-semibold border transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                           style={{
                             background: ytdlpMode === id ? 'var(--gradient-button)' : 'var(--bg)',
                             borderColor: ytdlpMode === id ? 'transparent' : 'var(--border)',
@@ -1925,8 +2405,8 @@ export default function App() {
                             {key:'best',label:'Best'},{key:'1080',label:'1080p'},
                             {key:'720',label:'720p'},{key:'480',label:'480p'},
                           ]).map(f => (
-                            <button key={f.key} onClick={() => setYtdlpQuality(f.key)}
-                              className="rounded-full px-2.5 py-1 text-[11px] font-medium border transition-all"
+                            <button key={f.key} onClick={() => setYtdlpQuality(f.key)} disabled={(ytdlpLoading && !ytdlpInfo) || inCardProgress}
+                              className="rounded-full px-2.5 py-1 text-[11px] font-medium border transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                               style={{
                                 background: ytdlpQuality === f.key ? 'var(--violet-bg)' : 'transparent',
                                 borderColor: ytdlpQuality === f.key ? 'var(--violet)' : 'var(--border)',
@@ -1938,8 +2418,8 @@ export default function App() {
                         : (ytdlpInfo?.audio_formats || [
                             {key:'m4a',label:'M4A'},{key:'webm',label:'WebM'},{key:'best',label:'Best'},
                           ]).map(f => (
-                            <button key={f.key} onClick={() => setYtdlpAudioFmt(f.key)}
-                              className="rounded-full px-2.5 py-1 text-[11px] font-medium border transition-all"
+                            <button key={f.key} onClick={() => setYtdlpAudioFmt(f.key)} disabled={(ytdlpLoading && !ytdlpInfo) || inCardProgress}
+                              className="rounded-full px-2.5 py-1 text-[11px] font-medium border transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                               style={{
                                 background: ytdlpAudioFmt === f.key ? 'var(--violet-bg)' : 'transparent',
                                 borderColor: ytdlpAudioFmt === f.key ? 'var(--violet)' : 'var(--border)',
@@ -1952,13 +2432,16 @@ export default function App() {
                     </div>
 
                     {/* Extract button */}
-                    <button onClick={onExtract} disabled={ytdlpLoading}
-                      className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-60 disabled:cursor-wait"
+                    <button onClick={onExtract} disabled={ytdlpLoading || inCardProgress} aria-busy={inCardProgress || undefined}
+                      className={`w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white transition-all ${inCardProgress ? 'opacity-50 saturate-50 cursor-not-allowed' : 'disabled:opacity-60 disabled:cursor-wait'}`}
                       style={{ background: 'var(--gradient-button)', boxShadow: 'var(--gradient-btn-shadow)', transition: 'opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease' }}
-                      onMouseEnter={e => { if (!ytdlpLoading) { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' } }}
-                      onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)' }}>
-                      <Ic.Download />
-                      {ytdlpMode === 'audio' ? 'Download Audio' : 'Download Video'}
+                      onMouseEnter={e => { if (!ytdlpLoading && !inCardProgress) { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)' } }}
+                      onMouseLeave={e => { e.currentTarget.style.opacity=''; e.currentTarget.style.transform='translateY(0)' }}>
+                      {inCardProgress
+                        ? <>{mediaProgress.stage !== 'ready' && <span className="media-dl-spinner" />}{busyLabel}</>
+                        : ytdlpSaved
+                          ? <><Ic.Download />{t(ytdlpMode === 'audio' ? 'btn_save_audio' : 'btn_save_video')}</>
+                          : <><Ic.Download />{ytdlpMode === 'audio' ? 'Download Audio' : 'Download Video'}</>}
                     </button>
                   </div>
                 )}
@@ -2013,7 +2496,7 @@ export default function App() {
                       {t('btn_cancel')}
                     </button>
                   )}
-                  {(phase === 'done' || statuses.length > 0) && !isBusy && phase !== 'scanning' && (
+                  {(phase === 'done' || statuses.length > 0 || ytdlpResult || Object.keys(savedVideos).length > 0) && !isBusy && phase !== 'scanning' && (
                     <button onClick={onClear}
                       className="flex-1 rounded-xl py-2.5 text-sm font-medium transition-all border"
                       style={{ borderColor: 'var(--border)', color: 'var(--text-2)', background: 'transparent' }}

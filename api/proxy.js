@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   if (!url) return res.status(400).json({ error: 'Missing url' })
 
   let parsed
-  try { parsed = new URL(url) } catch (_e) { return res.status(400).json({ error: 'Invalid URL' }) }
+  try { parsed = new URL(url) } catch { return res.status(400).json({ error: 'Invalid URL' }) }
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     return res.status(400).json({ error: 'Only HTTP/HTTPS URLs allowed' })
   }
@@ -46,7 +46,7 @@ export default async function handler(req, res) {
                 if (images.length === 0) images = extractAllImagesFromHtml(gbHtml, url)
               }
             }
-          } catch (_e) {}
+          } catch { /* optional retry failed; keep the current result */ }
         }
 
         const videos = await Promise.all(
