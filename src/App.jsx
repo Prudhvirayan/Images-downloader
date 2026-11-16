@@ -364,8 +364,8 @@ function Lightbox({ images, startIndex, onClose }) {
   const [hud, setHud] = useState(null) // { icon: 'vol' | 'mute' | null, text, id }
   const hudTimer = useRef(null)
   const fmtTime = secs => `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`
-  const showHud = useCallback((text, icon = null) => {
-    setHud({ text, icon, id: Date.now() })
+  const showHud = useCallback((text, icon = null, kind = 'badge') => {
+    setHud({ text, icon, kind, id: Date.now() })
     clearTimeout(hudTimer.current)
     hudTimer.current = setTimeout(() => setHud(h => (h ? { ...h, hidden: true } : h)), 400)
   }, [])
@@ -419,18 +419,23 @@ function Lightbox({ images, startIndex, onClose }) {
     setVt({ x: cur.x * ratio, y: cur.y * ratio, scale: next })
     if (stops.includes(next)) showHud(stopLabel(next))
   }, [showHud, zoomStops, stopLabel])
+  // Manual navigation briefly shows the position ("3 / 51"); the slideshow advances without it.
   const prev = useCallback(() => {
     setPlaying(false)
     resetView()
     setRotation(0)
-    setIndex(i => Math.max(0, i - 1))
-  }, [resetView])
+    const target = Math.max(0, index - 1)
+    setIndex(target)
+    if (total > 1 && target !== index && isFS) showHud(`${target + 1} / ${total}`, null, 'count')
+  }, [resetView, index, total, showHud, isFS])
   const next = useCallback(() => {
     setPlaying(false)
     resetView()
     setRotation(0)
-    setIndex(i => (i + 1) % total)
-  }, [resetView, total])
+    const target = (index + 1) % total
+    setIndex(target)
+    if (total > 1 && isFS) showHud(`${target + 1} / ${total}`, null, 'count')
+  }, [resetView, index, total, showHud, isFS])
   useEffect(() => {
     if (!playing) return
     const t = setTimeout(() => {
@@ -670,7 +675,7 @@ function Lightbox({ images, startIndex, onClose }) {
       {/* Toolbar — hidden in fullscreen */}
       {!isFS && (
         <div className="flex items-center gap-2 px-3 py-2 border-b border-white/8 flex-shrink-0" style={{ background: 'rgba(10,10,12,0.85)', backdropFilter: 'blur(12px)' }}>
-          <span className="text-white/40 text-xs tabular-nums font-mono flex-shrink-0">{index + 1} / {total}</span>
+          {total > 1 && <span className="text-white/40 text-xs tabular-nums font-mono flex-shrink-0">{index + 1} / {total}</span>}
           <p className="text-white/20 text-[11px] font-mono truncate hidden lg:block min-w-0 flex-1">{current.filename || current.imageUrl || current.url}</p>
 
           {/* Desktop-only controls — hidden on small screens to prevent overflow */}
@@ -746,8 +751,13 @@ function Lightbox({ images, startIndex, onClose }) {
         {/* Shortcut feedback badge (top centre, ~0.4 s) */}
         {hud && (
           <div key={hud.id} role="status" aria-live="polite"
-            className="absolute top-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium text-white tabular-nums pointer-events-none"
-            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', opacity: hud.hidden ? 0 : 1, transition: 'opacity 0.15s ease' }}>
+            className={hud.kind === 'count'
+              ? 'absolute top-4 left-1/2 -translate-x-1/2 z-30 text-xs font-mono tabular-nums text-white/10 pointer-events-none'
+              : 'absolute top-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium text-white tabular-nums pointer-events-none'}
+            style={{
+              ...(hud.kind === 'count' ? {} : { background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }),
+              opacity: hud.hidden ? 0 : 1, transition: 'opacity 0.15s ease',
+            }}>
             {hud.icon && (
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
@@ -773,11 +783,6 @@ function Lightbox({ images, startIndex, onClose }) {
           </button>
         )}
 
-        {isFS && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white/20 text-xs tabular-nums font-mono pointer-events-none">
-            {index + 1} / {total}
-          </div>
-        )}
 
         {/* Play/pause flash — YouTube-style visual feedback, visible on Space press */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20"
