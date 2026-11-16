@@ -176,7 +176,10 @@ class handler(BaseHTTPRequestHandler):
 
         except Exception as e:
             msg = str(e)
-            if 'Sign in' in msg or 'login' in msg.lower():
+            if 'not a bot' in msg or 'confirm you' in msg.lower():
+                # YouTube blocks most cloud/data-centre servers with a "Sign in to confirm you're not a bot" check.
+                msg = 'YouTube is blocking downloads from this server right now. Try again later, or try another video site.'
+            elif 'Sign in' in msg or 'login' in msg.lower():
                 msg = 'This content requires login — private or age-restricted.'
             elif 'Unsupported URL' in msg:
                 msg = 'Platform not supported by yt-dlp.'

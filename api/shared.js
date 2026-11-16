@@ -322,9 +322,12 @@ export async function resolveWistiaVideo(hash) {
       .filter(a => a.ext === 'mp4' || a.type === 'original')
       .sort((a, b) => (b.width || 0) - (a.width || 0))[0]
     if (!mp4) return null
+    // Wistia's still frame is served as .bin; the .jpg variant with a resize hint returns a small JPEG thumbnail.
+    const still = assets.find(a => a.type === 'still_image' && a.url)
     return {
       directUrl: mp4.url,
       title: data?.media?.name || null,
+      thumbnail: still ? `${still.url.replace(/\.bin(\?.*)?$/, '.jpg')}?image_crop_resized=320x180` : null,
       width: mp4.width || null,
       height: mp4.height || null,
       duration: Math.round(data?.media?.duration || 0) || null,

@@ -1637,7 +1637,8 @@ export default function App() {
         const ct  = res.headers.get('content-type') || ''
         if (!ct.includes('application/json')) return // API not available locally — silent fallback
         const data = await res.json()
-        if (data.error || ctrl.signal.aborted) return
+        if (ctrl.signal.aborted) return
+        if (data.error) { setScanError(data.error); return } // e.g. the platform blocks this server
         setYtdlpInfo(data)
         if (data.video_formats?.length) setYtdlpQuality(data.video_formats[0].key)
         if (data.audio_formats?.length) setYtdlpAudioFmt(data.audio_formats[0].key)
